@@ -1,0 +1,11 @@
+{
+  "name": "Local AI",
+  "label": "Local AI",
+  "description": "On-device AI inference using small language models for text generation, classification, and data transformation",
+  "group": "",
+  "artifactName": "",
+  "packageVersion": "",
+  "codeVersion": "",
+  "author": "Micah Smith",
+  "commands": []
+}

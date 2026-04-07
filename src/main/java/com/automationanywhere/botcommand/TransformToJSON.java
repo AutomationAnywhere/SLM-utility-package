@@ -1,0 +1,382 @@
+package com.automationanywhere.botcommand;
+
+import com.automationanywhere.botcommand.data.Value;
+import com.automationanywhere.botcommand.data.impl.StringValue;
+import com.automationanywhere.botcommand.exception.BotCommandException;
+import com.automationanywhere.botcommand.utils.ModelManager;
+import com.automationanywhere.botcommand.utils.LlamaInference;
+import com.automationanywhere.commandsdk.annotations.*;
+import com.automationanywhere.commandsdk.annotations.BotCommand;
+import com.automationanywhere.commandsdk.annotations.rules.NotEmpty;
+import com.automationanywhere.commandsdk.model.AllowedTarget;
+import com.automationanywhere.commandsdk.model.AttributeType;
+import com.automationanywhere.commandsdk.model.DataType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
+
+import static com.automationanywhere.commandsdk.model.DataType.STRING;
+
+/**
+ * TransformToJSON Action
+ *
+ * Converts various text formats into valid JSON strings using Small Language Models.
+ * Perfect for:
+ * - CSV data → JSON array for REST APIs
+ * - Key-value text → JSON object for logging/storage
+ * - Table data → JSON for database operations
+ * - Unstructured text → structured JSON
+ *
+ * Returns a valid JSON string (either object {} or array [])
+ * Output is validated to ensure JSON syntax correctness.
+ *
+ * First execution downloads model (~600MB-5GB) and may take 10-30 seconds for loading.
+ * Subsequent calls are faster (<5 seconds) as models stay in memory.
+ */
+@BotCommand
+@CommandPkg(
+    label = "Transform To JSON",
+    name = "transformToJSON",
+    description = "Converts various text formats into valid JSON strings using on-device Small Language Model",
+    node_label = "Transform to JSON: {{inputText}}",
+    icon = "pkg.svg",
+    comment = true,
+    text_color = "#2C3E50",
+    background_color = "#FFF3E0",
+    allowed_agent_targets = {
+        AllowedTarget.WINDOWS,
+        AllowedTarget.MAC_OS
+    },
+    return_type = STRING,
+    return_required = true
+)
+public class TransformToJSON {
+
+    private static final Logger logger = LogManager.getLogger(TransformToJSON.class);
+    private static final Gson gson = new Gson();
+
+    /**
+     * Execute text to JSON transformation using a Small Language Model
+     *
+     * @param inputText The text to transform into JSON
+     * @param inputFormat Format of input: "CSV", "TSV", "Key-Value", "Table", "Auto-detect"
+     * @param outputStyle JSON output style: "compact" (no whitespace) or "pretty" (formatted)
+     * @param outputType Output structure: "object" (single {}) or "array" (multiple [{}])
+     * @param modelName The model to use (qwen2.5-3b, llama3.2-3b, phi3.5-mini, gemma-2b)
+     * @param timeoutSeconds Maximum time to wait for processing (default: 30)
+     * @return Valid JSON string
+     */
+    @Execute
+    public Value<String> execute(
+
+        @Idx(index = "1", type = AttributeType.TEXTAREA)
+        @Pkg(label = "Input Text", description = "Text to transform into JSON")
+        @NotEmpty
+        String inputText,
+
+        @Idx(index = "2", type = AttributeType.SELECT, options = {
+            @Idx.Option(index = "2.1", pkg = @Pkg(label = "CSV", value = "csv")),
+            @Idx.Option(index = "2.2", pkg = @Pkg(label = "TSV (Tab-Separated)", value = "tsv")),
+            @Idx.Option(index = "2.3", pkg = @Pkg(label = "Key-Value Pairs", value = "key-value")),
+            @Idx.Option(index = "2.4", pkg = @Pkg(label = "Table", value = "table")),
+            @Idx.Option(index = "2.5", pkg = @Pkg(label = "List/Bullet Points", value = "list")),
+            @Idx.Option(index = "2.6", pkg = @Pkg(label = "Auto-Detect", value = "auto-detect"))
+        })
+        @Pkg(label = "Input Format", description = "Format of the input text", default_value = "auto-detect", default_value_type = DataType.STRING)
+        @NotEmpty
+        String inputFormat,
+
+        @Idx(index = "3", type = AttributeType.SELECT, options = {
+            @Idx.Option(index = "3.1", pkg = @Pkg(label = "Compact (no whitespace)", value = "compact")),
+            @Idx.Option(index = "3.2", pkg = @Pkg(label = "Pretty (formatted)", value = "pretty"))
+        })
+        @Pkg(label = "Output Style", description = "JSON formatting style", default_value = "compact", default_value_type = DataType.STRING)
+        @NotEmpty
+        String outputStyle,
+
+        @Idx(index = "4", type = AttributeType.SELECT, options = {
+            @Idx.Option(index = "4.1", pkg = @Pkg(label = "Object (single {})", value = "object")),
+            @Idx.Option(index = "4.2", pkg = @Pkg(label = "Array (multiple [{}])", value = "array"))
+        })
+        @Pkg(label = "Output Type", description = "JSON structure type", default_value = "object", default_value_type = DataType.STRING)
+        @NotEmpty
+        String outputType,
+
+        @Idx(index = "5", type = AttributeType.SELECT, options = {
+            @Idx.Option(index = "5.1", pkg = @Pkg(label = "Qwen2.5 3B (Q4, ~2.1GB, 128K context)", value = "qwen2.5-3b")),
+            @Idx.Option(index = "5.2", pkg = @Pkg(label = "Llama 3.2 3B (Q4, ~2.0GB)", value = "llama3.2-3b")),
+            @Idx.Option(index = "5.3", pkg = @Pkg(label = "Phi-3.5 Mini (Q4, ~2.23GB, 128K context)", value = "phi3.5-mini")),
+            @Idx.Option(index = "5.4", pkg = @Pkg(label = "Gemma 2B (Q4, ~1.7GB)", value = "gemma-2b")),
+            @Idx.Option(index = "5.5", pkg = @Pkg(label = "Gemma 4 E2B (Q4, ~3.1GB, 128K context)", value = "gemma4-e2b")),
+            @Idx.Option(index = "5.6", pkg = @Pkg(label = "DeepSeek R1 1.5B (Q4, ~1.1GB, reasoning)", value = "deepseek-r1-1.5b"))
+        })
+        @Pkg(label = "Model", description = "Small Language Model to use for transformation (curated top models under 3GB).", default_value = "qwen2.5-3b", default_value_type = DataType.STRING)
+        @NotEmpty
+        String modelName,
+
+        @Idx(index = "6", type = AttributeType.NUMBER)
+        @Pkg(label = "Timeout (seconds)", description = "Maximum time to wait for processing", default_value = "30", default_value_type = DataType.NUMBER)
+        @NotEmpty
+        Double timeoutSeconds
+
+    ) {
+
+        logger.info("TransformToJSON action started - Model: {}, Format: {}, Style: {}, Type: {}, Timeout: {}s",
+                    modelName, inputFormat, outputStyle, outputType, timeoutSeconds);
+
+        try {
+            // Validate inputs
+            if (inputText == null || inputText.trim().isEmpty()) {
+                throw new BotCommandException("Input text cannot be empty");
+            }
+
+            if (inputFormat == null || inputFormat.trim().isEmpty()) {
+                inputFormat = "auto-detect";
+            }
+
+            if (outputStyle == null || outputStyle.trim().isEmpty()) {
+                outputStyle = "compact";
+            }
+
+            if (outputType == null || outputType.trim().isEmpty()) {
+                outputType = "object";
+            }
+
+            if (timeoutSeconds == null || timeoutSeconds <= 0) {
+                timeoutSeconds = 30.0;
+            }
+
+            // Parse model type
+            ModelManager.ModelType modelType;
+            try {
+                modelType = ModelManager.ModelType.fromId(modelName.toLowerCase().trim());
+            } catch (IllegalArgumentException e) {
+                logger.error("Invalid model name: {}", modelName);
+                throw new BotCommandException("Invalid model name: " + modelName +
+                    ". Valid options: " + ModelManager.ModelType.supportedModelIds());
+            }
+
+            logger.debug("Using model: {} for text length: {}", modelType.getId(), inputText.length());
+
+            // Initialize inference engine (will load model if needed)
+            long startTime = System.currentTimeMillis();
+            LlamaInference inference = new LlamaInference(modelType);
+            long loadTime = System.currentTimeMillis() - startTime;
+
+            if (loadTime > 1000) {
+                logger.info("Model loaded in {}ms (first-time loading takes longer)", loadTime);
+            }
+
+            // Build transformation prompt
+            String prompt = buildTransformationPrompt(inputText, inputFormat, outputType);
+            logger.debug("Generated prompt: {}", prompt.length() > 200 ? prompt.substring(0, 200) + "..." : prompt);
+
+            // Generate JSON
+            String rawResponse = inference.generateText(
+                prompt,
+                300,  // maxTokens - JSON can be verbose
+                0.2f, // Low temperature for consistent structure
+                timeoutSeconds.intValue()
+            );
+
+            // Parse, validate, and format the JSON response
+            String jsonResult = parseAndValidateJSON(rawResponse, outputStyle, outputType);
+
+            long totalTime = System.currentTimeMillis() - startTime;
+            logger.info("Transformation completed in {}ms. Output length: {} chars", totalTime, jsonResult.length());
+
+            return new StringValue(jsonResult);
+
+        } catch (Exception e) {
+            logger.error("TransformToJSON action failed", e);
+
+            // Provide helpful error messages
+            String errorMsg;
+            if (e.getMessage().contains("timeout")) {
+                errorMsg = "Transformation timed out after " + timeoutSeconds + " seconds. Try increasing timeout or using a smaller model.";
+            } else if (e.getMessage().contains("model") || e.getMessage().contains("GGUF")) {
+                errorMsg = "Model loading/inference failed: " + e.getMessage() +
+                    ". Ensure sufficient memory (~8GB RAM) and model is downloaded.";
+            } else if (e.getMessage().contains("JSON")) {
+                errorMsg = "Failed to generate valid JSON: " + e.getMessage() + ". Try using a larger model (Gemma 2B or Qwen2.5 3B).";
+            } else {
+                errorMsg = "Transformation failed: " + e.getMessage();
+            }
+
+            logger.error("Error details: {}", errorMsg);
+            throw new BotCommandException(errorMsg, e);
+        }
+    }
+
+    /**
+     * Build the transformation prompt based on input format and output type
+     */
+    private String buildTransformationPrompt(String inputText, String inputFormat, String outputType) {
+        StringBuilder prompt = new StringBuilder();
+
+        // Use a more direct instruction format that works better with small models
+        prompt.append("Task: Convert text to JSON\n\n");
+
+        // Add format-specific instructions with clear examples
+        switch (inputFormat.toLowerCase().trim()) {
+            case "csv":
+                prompt.append("Format: CSV\n");
+                if (outputType.equals("array")) {
+                    prompt.append("Example:\nInput: Name,Age\nJohn,30\nJane,25\nOutput: [{\"Name\":\"John\",\"Age\":\"30\"},{\"Name\":\"Jane\",\"Age\":\"25\"}]\n\n");
+                } else {
+                    prompt.append("Example:\nInput: Name,Age\nJohn,30\nOutput: {\"Name\":\"John\",\"Age\":\"30\"}\n\n");
+                }
+                break;
+
+            case "tsv":
+                prompt.append("Format: TSV (tab-separated)\n");
+                if (outputType.equals("array")) {
+                    prompt.append("Output: JSON array\n\n");
+                } else {
+                    prompt.append("Output: JSON object\n\n");
+                }
+                break;
+
+            case "key-value":
+                prompt.append("Format: Key-Value pairs\n");
+                prompt.append("Example:\nInput: Name: John\nAge: 30\nOutput: {\"Name\":\"John\",\"Age\":\"30\"}\n\n");
+                break;
+
+            case "table":
+                prompt.append("Format: Text table\n");
+                if (outputType.equals("array")) {
+                    prompt.append("Output: JSON array\n\n");
+                } else {
+                    prompt.append("Output: JSON object\n\n");
+                }
+                break;
+
+            case "list":
+                prompt.append("Format: List\n");
+                if (outputType.equals("array")) {
+                    prompt.append("Example:\nInput: - Apple\n- Banana\nOutput: [\"Apple\",\"Banana\"]\n\n");
+                } else {
+                    prompt.append("Example:\nInput: - Apple\n- Banana\nOutput: {\"item1\":\"Apple\",\"item2\":\"Banana\"}\n\n");
+                }
+                break;
+
+            case "auto-detect":
+            default:
+                prompt.append("Format: Auto-detect\n");
+                if (outputType.equals("array")) {
+                    prompt.append("Output: JSON array []\n\n");
+                } else {
+                    prompt.append("Output: JSON object {}\n\n");
+                }
+                break;
+        }
+
+        prompt.append("Input:\n").append(inputText).append("\n\n");
+        prompt.append("Output:");
+
+        return prompt.toString();
+    }
+
+    /**
+     * Parse, validate, and format the JSON response
+     */
+    private String parseAndValidateJSON(String rawResponse, String outputStyle, String outputType) throws BotCommandException {
+        if (rawResponse == null || rawResponse.trim().isEmpty()) {
+            throw new BotCommandException("Model returned empty response");
+        }
+
+        String cleaned = rawResponse.trim();
+
+        // Strip DeepSeek R1 thinking blocks (<think>...</think>)
+        cleaned = LlamaInference.stripThinkingBlocks(cleaned);
+
+        // Remove markdown code block markers if present
+        cleaned = cleaned.replaceAll("^```json\\s*\\n?", "");
+        cleaned = cleaned.replaceAll("^```\\s*\\n?", "");
+        cleaned = cleaned.replaceAll("\\n?```$", "");
+        cleaned = cleaned.trim();
+
+        // Find the JSON content (starts with { or [)
+        int jsonStart = -1;
+        for (int i = 0; i < cleaned.length(); i++) {
+            char c = cleaned.charAt(i);
+            if (c == '{' || c == '[') {
+                jsonStart = i;
+                break;
+            }
+        }
+
+        if (jsonStart == -1) {
+            logger.error("No JSON structure found in response. Response preview: {}",
+                cleaned.length() > 200 ? cleaned.substring(0, 200) : cleaned);
+            throw new BotCommandException("No JSON structure found in model response. Response: " +
+                (cleaned.length() > 100 ? cleaned.substring(0, 100) + "..." : cleaned));
+        }
+
+        // Extract from first { or [ to the end, then find matching closing bracket
+        cleaned = cleaned.substring(jsonStart);
+
+        // Find the last } or ] that matches
+        int depth = 0;
+        int jsonEnd = -1;
+        char startChar = cleaned.charAt(0);
+        char endChar = (startChar == '{') ? '}' : ']';
+
+        for (int i = 0; i < cleaned.length(); i++) {
+            char c = cleaned.charAt(i);
+            if (c == startChar || c == (startChar == '{' ? '{' : '[')) {
+                depth++;
+            } else if (c == endChar || c == (endChar == '}' ? '}' : ']')) {
+                depth--;
+                if (depth == 0) {
+                    jsonEnd = i;
+                    break;
+                }
+            }
+        }
+
+        if (jsonEnd != -1) {
+            cleaned = cleaned.substring(0, jsonEnd + 1);
+        }
+
+        // Validate JSON syntax
+        try {
+            Object parsed = gson.fromJson(cleaned, Object.class);
+
+            // Validate output type matches request
+            boolean isArray = parsed instanceof java.util.List;
+            boolean isObject = parsed instanceof java.util.Map;
+
+            if (outputType.equals("array") && !isArray) {
+                logger.warn("Requested array but got object, wrapping in array");
+                cleaned = "[" + cleaned + "]";
+            } else if (outputType.equals("object") && !isObject) {
+                logger.warn("Requested object but got array, using first element");
+                java.util.List<?> list = (java.util.List<?>) parsed;
+                if (!list.isEmpty()) {
+                    cleaned = gson.toJson(list.get(0));
+                } else {
+                    cleaned = "{}";
+                }
+            }
+
+            // Re-parse to apply formatting
+            Object finalParsed = gson.fromJson(cleaned, Object.class);
+
+            if (outputStyle.equals("pretty")) {
+                com.google.gson.GsonBuilder gsonBuilder = new com.google.gson.GsonBuilder();
+                gsonBuilder.setPrettyPrinting();
+                Gson prettyGson = gsonBuilder.create();
+                return prettyGson.toJson(finalParsed);
+            } else {
+                return gson.toJson(finalParsed);
+            }
+
+        } catch (JsonSyntaxException e) {
+            logger.error("Invalid JSON generated: {}", cleaned);
+            throw new BotCommandException("Generated invalid JSON: " + e.getMessage() +
+                                        "\nGenerated content: " + cleaned);
+        }
+    }
+}

@@ -1,0 +1,174 @@
+package com.automationanywhere.botcommand;
+
+import com.automationanywhere.botcommand.data.Value;
+import com.automationanywhere.botcommand.data.impl.BooleanValue;
+import com.automationanywhere.botcommand.exception.BotCommandException;
+import com.automationanywhere.botcommand.utils.ModelManager;
+import com.automationanywhere.botcommand.utils.ModelDownloader;
+import com.automationanywhere.commandsdk.annotations.*;
+import com.automationanywhere.commandsdk.annotations.BotCommand;
+import com.automationanywhere.commandsdk.annotations.rules.NotEmpty;
+import com.automationanywhere.commandsdk.model.AllowedTarget;
+import com.automationanywhere.commandsdk.model.AttributeType;
+import com.automationanywhere.commandsdk.model.DataType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+import static com.automationanywhere.commandsdk.model.DataType.BOOLEAN;
+import static com.automationanywhere.commandsdk.model.DataType.STRING;
+
+/**
+ * ValidateDevice Action
+ *
+ * Downloads or validates that a Small Language Model is available on the device.
+ * Use this action before running inference to ensure the model is ready.
+ *
+ * This action will:
+ * 1. Check if the model already exists locally
+ * 2. If not, download it from HuggingFace (~669MB-5GB depending on model)
+ * 3. Validate the model file is complete and accessible
+ * 4. Return true if device is ready for inference
+ *
+ * Model storage locations:
+ * - Windows: C:\Users\{username}\.aa-slm-models\
+ * - macOS: /Users/{username}/.aa-slm-models/
+ *
+ * First-time download may take 5-15 minutes depending on internet speed.
+ */
+@BotCommand
+@CommandPkg(
+    label = "Validate Device",
+    name = "validateDevice",
+    description = "Download or validate that a model is available on the device. Models stored in: Windows (C:\\Users\\{username}\\.aa-slm-models\\), macOS (/Users/{username}/.aa-slm-models/)",
+    node_label = "Validate Device: {{modelName}}",
+    icon = "pkg.svg",
+    comment = true,
+    text_color = "#2C3E50",
+    background_color = "#3498DB",
+    allowed_agent_targets = {
+//                AllowedTarget.HEADLESS,
+            AllowedTarget.WINDOWS,
+            AllowedTarget.MAC_OS
+//                AllowedTarget.ONDEMAND_CLOUD
+    },
+    return_type = BOOLEAN,
+    return_required = true
+)
+public class ValidateDevice {
+
+    private static final Logger logger = LogManager.getLogger(ValidateDevice.class);
+
+    /**
+     * Execute device validation and model download if needed
+     *
+     * @param modelName The model to download/validate
+     * @return True if device is ready (model downloaded and validated)
+     */
+    @Execute
+    public Value<Boolean> execute(
+
+        @Idx(index = "1", type = AttributeType.SELECT, options = {
+            @Idx.Option(index = "1.1", pkg = @Pkg(label = "Qwen2.5 3B (Q4, ~2.1GB, 128K context)", value = "qwen2.5-3b")),
+            @Idx.Option(index = "1.2", pkg = @Pkg(label = "Llama 3.2 3B (Q4, ~2.0GB)", value = "llama3.2-3b")),
+            @Idx.Option(index = "1.3", pkg = @Pkg(label = "Phi-3.5 Mini (Q4, ~2.23GB, 128K context)", value = "phi3.5-mini")),
+            @Idx.Option(index = "1.4", pkg = @Pkg(label = "Gemma 2B (Q4, ~1.7GB)", value = "gemma-2b")),
+            @Idx.Option(index = "1.5", pkg = @Pkg(label = "Gemma 4 E2B (Q4, ~3.1GB, 128K context)", value = "gemma4-e2b")),
+            @Idx.Option(index = "1.6", pkg = @Pkg(label = "DeepSeek R1 1.5B (Q4, ~1.1GB, reasoning)", value = "deepseek-r1-1.5b"))
+        })
+        @Pkg(label = "Model", description = "Small Language Model to validate/download (curated top models under 3GB).", default_value = "qwen2.5-3b", default_value_type = DataType.STRING)
+        @NotEmpty
+        String modelName
+
+    ) {
+
+        logger.info("ValidateDevice action started - Model: {}", modelName);
+
+        try {
+            // Parse model type
+            ModelManager.ModelType modelType;
+            try {
+                modelType = ModelManager.ModelType.fromId(modelName.toLowerCase().trim());
+            } catch (IllegalArgumentException e) {
+                logger.error("Invalid model name: {}", modelName);
+                throw new BotCommandException("Invalid model name: " + modelName +
+                    ". Valid options: " + ModelManager.ModelType.supportedModelIds());
+            }
+
+            logger.info("Validating model: {} (~{}MB)", modelType.getId(), modelType.getSizeMB());
+
+            // Get model path
+            ModelManager manager = ModelManager.getInstance();
+            Path modelPath = manager.getModelPath(modelType);
+            Path modelDir = manager.getModelDirectory(modelType);
+
+            logger.debug("Model path: {}", modelPath);
+            logger.debug("Model directory: {}", modelDir);
+
+            // Check if model already exists
+            boolean modelExists = Files.exists(modelPath);
+
+            if (modelExists) {
+                logger.info("Model already exists at: {}", modelPath);
+
+                // Validate file is accessible and has reasonable size
+                try {
+                    long fileSize = Files.size(modelPath);
+                    long expectedMinSize = (long) modelType.getSizeMB() * 1024 * 1024 / 2; // At least 50% of expected size
+
+                    if (fileSize < expectedMinSize) {
+                        logger.warn("Model file exists but seems incomplete ({}MB, expected ~{}MB). Re-downloading...",
+                            fileSize / 1024 / 1024, modelType.getSizeMB());
+
+                        // Delete incomplete file
+                        Files.delete(modelPath);
+                        modelExists = false;
+                    } else {
+                        logger.info("Model file validated: {}MB", fileSize / 1024 / 1024);
+                    }
+
+                } catch (Exception e) {
+                    logger.error("Error validating existing model file", e);
+                    throw new BotCommandException("Error validating model file: " + e.getMessage());
+                }
+            }
+
+            // Download if needed
+            if (!modelExists) {
+                logger.info("Model not found. Starting download (~{}MB)...", modelType.getSizeMB());
+                logger.info("This may take 5-15 minutes depending on internet speed.");
+
+                try {
+                    ModelDownloader.downloadModel(modelType);
+                    logger.info("Model downloaded successfully to: {}", modelPath);
+
+                } catch (Exception e) {
+                    logger.error("Model download failed", e);
+                    throw new BotCommandException("Failed to download model: " + e.getMessage() +
+                        ". Please check internet connection and disk space.");
+                }
+            }
+
+            // Final validation
+            if (!Files.exists(modelPath)) {
+                throw new BotCommandException("Model validation failed: File does not exist after download");
+            }
+
+            long finalSize = Files.size(modelPath);
+            logger.info("Device validation complete. Model ready at: {} ({}MB)",
+                modelPath, finalSize / 1024 / 1024);
+
+            return new BooleanValue(true);
+
+        } catch (BotCommandException e) {
+            // Re-throw bot command exceptions
+            throw e;
+
+        } catch (Exception e) {
+            logger.error("ValidateDevice action failed", e);
+            throw new BotCommandException("Device validation failed: " + e.getMessage(), e);
+        }
+    }
+}
