@@ -1,6 +1,7 @@
 package com.automationanywhere.botcommand;
 
-import com.automationanywhere.botcommand.data.Value;
+import com.automationanywhere.botcommand.data.impl.DictionaryValue;
+import com.automationanywhere.botcommand.data.impl.StringValue;
 import com.automationanywhere.botcommand.utils.ModelManager;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
@@ -70,14 +71,14 @@ public class TestQwen25 {
 
         long startTime = System.currentTimeMillis();
 
-        Value<Boolean> result = validateAction.execute("qwen2.5-3b");
+        DictionaryValue result = validateAction.execute("qwen2.5-3b");
 
         long elapsed = System.currentTimeMillis() - startTime;
 
         System.out.println("\n✓ Validation completed in " + (elapsed/1000) + " seconds");
 
         assertNotNull(result, "Validation result should not be null");
-        assertTrue(result.get(), "Model should be validated successfully");
+        assertTrue("true".equals(((StringValue) result.get("supported")).get()), "Model should be validated successfully");
 
         System.out.println("✓ Qwen2.5-3B model is ready for use!");
     }
@@ -98,7 +99,7 @@ public class TestQwen25 {
         long startTime = System.currentTimeMillis();
 
         try {
-            Value<String> result = promptAction.execute(
+            DictionaryValue result = promptAction.execute(
                 prompt,
                 "qwen2.5-3b",
                 120.0,  // 2 minute timeout
@@ -106,15 +107,16 @@ public class TestQwen25 {
             );
 
             long elapsed = System.currentTimeMillis() - startTime;
+            String response = ((StringValue) result.get("response")).get();
 
             System.out.println("\n✓ Completed in " + (elapsed/1000) + " seconds");
             System.out.println("\nModel response:");
-            System.out.println("  \"" + result.get() + "\"");
-            System.out.println("\nResponse length: " + result.get().length() + " characters");
+            System.out.println("  \"" + response + "\"");
+            System.out.println("\nResponse length: " + response.length() + " characters");
 
             assertNotNull(result, "Result should not be null");
-            assertNotNull(result.get(), "Result value should not be null");
-            assertFalse(result.get().isEmpty(), "Response should not be empty");
+            assertNotNull(response, "Result value should not be null");
+            assertFalse(response.isEmpty(), "Response should not be empty");
 
             if (elapsed < 60000) {
                 System.out.println("\n✓ Good performance (< 60 seconds)");
@@ -145,7 +147,7 @@ public class TestQwen25 {
         long startTime = System.currentTimeMillis();
 
         try {
-            Value<String> result = promptAction.execute(
+            DictionaryValue result = promptAction.execute(
                 prompt,
                 "qwen2.5-3b",
                 120.0,
@@ -153,14 +155,15 @@ public class TestQwen25 {
             );
 
             long elapsed = System.currentTimeMillis() - startTime;
+            String response = ((StringValue) result.get("response")).get();
 
             System.out.println("\n✓ Completed in " + (elapsed/1000) + " seconds");
             System.out.println("\nModel response:");
-            System.out.println("  " + result.get());
+            System.out.println("  " + response);
 
             assertNotNull(result);
-            assertNotNull(result.get());
-            assertFalse(result.get().isEmpty());
+            assertNotNull(response);
+            assertFalse(response.isEmpty());
 
             if (elapsed < 30000) {
                 System.out.println("\n✓ Excellent performance (< 30 seconds) - model is cached!");
@@ -192,7 +195,7 @@ public class TestQwen25 {
         long startTime = System.currentTimeMillis();
 
         try {
-            Value<String> result = promptAction.execute(
+            DictionaryValue result = promptAction.execute(
                 prompt,
                 "qwen2.5-3b",
                 120.0,
@@ -200,19 +203,20 @@ public class TestQwen25 {
             );
 
             long elapsed = System.currentTimeMillis() - startTime;
+            String response = ((StringValue) result.get("response")).get();
 
             System.out.println("\n✓ Completed in " + (elapsed/1000) + " seconds");
             System.out.println("\nModel response:");
-            System.out.println("  \"" + result.get() + "\"");
+            System.out.println("  \"" + response + "\"");
 
             assertNotNull(result);
-            assertNotNull(result.get());
-            assertFalse(result.get().isEmpty());
+            assertNotNull(response);
+            assertFalse(response.isEmpty());
 
             System.out.println("\nPerformance Analysis:");
             System.out.println("  - Elapsed time: " + elapsed + "ms");
-            System.out.println("  - Response length: " + result.get().length() + " chars");
-            System.out.println("  - Tokens/sec estimate: ~" + (result.get().length() * 1000 / elapsed) + " chars/sec");
+            System.out.println("  - Response length: " + response.length() + " chars");
+            System.out.println("  - Tokens/sec estimate: ~" + (response.length() * 1000 / elapsed) + " chars/sec");
 
             System.out.println("\n✓ Short prompt test successful!");
 
@@ -241,7 +245,7 @@ public class TestQwen25 {
         System.out.println("\nRecommendation:");
         System.out.println("  - For speed: Use TinyLlama (669MB) or Gemma 2B (1.7GB)");
         System.out.println("  - For quality + context: Use Qwen2.5 3B (2.1GB, 128K context)");
-        System.out.println("  - For best quality: Use Gemma 9B (5.4GB)");
+        System.out.println("  - For best quality: Use Gemma 4 E2B (3.1GB, 128K context)");
         System.out.println("=".repeat(80));
     }
 }

@@ -1,6 +1,7 @@
 package com.automationanywhere.botcommand;
 
-import com.automationanywhere.botcommand.data.Value;
+import com.automationanywhere.botcommand.data.impl.DictionaryValue;
+import com.automationanywhere.botcommand.data.impl.StringValue;
 import com.automationanywhere.botcommand.utils.ModelManager;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
@@ -126,7 +127,7 @@ public class TestClassifyText {
 
             long startTime = System.currentTimeMillis();
 
-            Value<String> result = classifyAction.execute(
+            DictionaryValue result = classifyAction.execute(
                 urgentText,
                 "urgent, normal, low_priority",
                 "qwen2.5-3b",
@@ -137,10 +138,10 @@ public class TestClassifyText {
 
             long elapsed = System.currentTimeMillis() - startTime;
             System.out.println("\n✓ Completed in " + elapsed + "ms");
-            System.out.println("Classification: " + result.get());
+            System.out.println("Classification: " + ((StringValue) result.get("category")).get());
 
             assertNotNull(result);
-            assertFalse(result.get().isEmpty());
+            assertFalse(((StringValue) result.get("category")).get().isEmpty());
 
         } catch (Exception e) {
             System.out.println("\n✗ Test failed: " + e.getMessage());
@@ -160,7 +161,7 @@ public class TestClassifyText {
             System.out.println("Input: " + positiveText);
             System.out.println("Categories: positive, negative, neutral");
 
-            Value<String> result = classifyAction.execute(
+            DictionaryValue result = classifyAction.execute(
                 positiveText,
                 "positive, negative, neutral",
                 "qwen2.5-3b",
@@ -169,10 +170,10 @@ public class TestClassifyText {
                 45.0
             );
 
-            System.out.println("Classification result: " + result.get());
+            System.out.println("Classification result: " + ((StringValue) result.get("category")).get());
 
             assertNotNull(result);
-            assertFalse(result.get().isEmpty());
+            assertFalse(((StringValue) result.get("category")).get().isEmpty());
 
         } catch (Exception e) {
             System.out.println("\n✗ Test failed: " + e.getMessage());

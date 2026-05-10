@@ -1,6 +1,7 @@
 package com.automationanywhere.botcommand;
 
-import com.automationanywhere.botcommand.data.Value;
+import com.automationanywhere.botcommand.data.impl.DictionaryValue;
+import com.automationanywhere.botcommand.data.impl.StringValue;
 import com.automationanywhere.botcommand.utils.ModelManager;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
@@ -122,7 +123,7 @@ public class TestTransformToJSON {
 
         long startTime = System.currentTimeMillis();
 
-        Value<String> result = transformAction.execute(
+        DictionaryValue result = transformAction.execute(
             csvInput,
             "csv",
             "compact",
@@ -133,10 +134,10 @@ public class TestTransformToJSON {
 
         long elapsed = System.currentTimeMillis() - startTime;
         System.out.println("\n✓ Completed in " + elapsed + "ms");
-        System.out.println("Output JSON: " + result.get());
+        System.out.println("Output JSON: " + ((StringValue) result.get("json")).get());
 
         assertNotNull(result);
-        String json = result.get();
+        String json = ((StringValue) result.get("json")).get();
 
         assertTrue(isValidJSON(json), "Output should be valid JSON");
         assertTrue(json.trim().startsWith("["), "Should start with [");
@@ -153,7 +154,7 @@ public class TestTransformToJSON {
         System.out.println("Input Key-Value:\n" + kvInput);
         System.out.println("Model: TinyLlama 1.1B");
 
-        Value<String> result = transformAction.execute(
+        DictionaryValue result = transformAction.execute(
             kvInput,
             "key-value",
             "compact",
@@ -162,10 +163,10 @@ public class TestTransformToJSON {
             60.0
         );
 
-        System.out.println("Output JSON: " + result.get());
+        System.out.println("Output JSON: " + ((StringValue) result.get("json")).get());
 
         assertNotNull(result);
-        String json = result.get();
+        String json = ((StringValue) result.get("json")).get();
         assertTrue(isValidJSON(json), "Output should be valid JSON");
     }
 
@@ -179,7 +180,7 @@ public class TestTransformToJSON {
         System.out.println("Input List:\n" + listInput);
         System.out.println("Model: TinyLlama 1.1B");
 
-        Value<String> result = transformAction.execute(
+        DictionaryValue result = transformAction.execute(
             listInput,
             "list",
             "compact",
@@ -188,10 +189,10 @@ public class TestTransformToJSON {
             45.0
         );
 
-        System.out.println("Output JSON: " + result.get());
+        System.out.println("Output JSON: " + ((StringValue) result.get("json")).get());
 
         assertNotNull(result);
-        String json = result.get();
+        String json = ((StringValue) result.get("json")).get();
         assertTrue(isValidJSON(json), "Output should be valid JSON");
         assertTrue(json.trim().startsWith("["), "Should be a JSON array");
     }
@@ -214,7 +215,7 @@ public class TestTransformToJSON {
 
         long startTime = System.currentTimeMillis();
 
-        Value<String> result = transformAction.execute(
+        DictionaryValue result = transformAction.execute(
             csvInput,
             "csv",
             "compact",
@@ -225,10 +226,10 @@ public class TestTransformToJSON {
 
         long elapsed = System.currentTimeMillis() - startTime;
         System.out.println("\n✓ Completed in " + elapsed + "ms");
-        System.out.println("Output JSON: " + result.get());
+        System.out.println("Output JSON: " + ((StringValue) result.get("json")).get());
 
         assertNotNull(result);
-        String json = result.get();
+        String json = ((StringValue) result.get("json")).get();
 
         assertTrue(isValidJSON(json), "Output should be valid JSON");
         assertTrue(json.trim().startsWith("["), "Should start with [");
@@ -249,7 +250,7 @@ public class TestTransformToJSON {
 
         long startTime = System.currentTimeMillis();
 
-        Value<String> result = transformAction.execute(
+        DictionaryValue result = transformAction.execute(
             kvInput,
             "key-value",
             "compact",
@@ -260,10 +261,10 @@ public class TestTransformToJSON {
 
         long elapsed = System.currentTimeMillis() - startTime;
         System.out.println("\n✓ Completed in " + elapsed + "ms");
-        System.out.println("Output JSON: " + result.get());
+        System.out.println("Output JSON: " + ((StringValue) result.get("json")).get());
 
         assertNotNull(result);
-        String json = result.get();
+        String json = ((StringValue) result.get("json")).get();
         assertTrue(isValidJSON(json), "Output should be valid JSON");
 
         System.out.println("\n✓ Gemma 2B successfully generated JSON object from key-value pairs");
@@ -281,7 +282,7 @@ public class TestTransformToJSON {
 
         long startTime = System.currentTimeMillis();
 
-        Value<String> result = transformAction.execute(
+        DictionaryValue result = transformAction.execute(
             listInput,
             "list",
             "compact",
@@ -292,10 +293,10 @@ public class TestTransformToJSON {
 
         long elapsed = System.currentTimeMillis() - startTime;
         System.out.println("\n✓ Completed in " + elapsed + "ms");
-        System.out.println("Output JSON: " + result.get());
+        System.out.println("Output JSON: " + ((StringValue) result.get("json")).get());
 
         assertNotNull(result);
-        String json = result.get();
+        String json = ((StringValue) result.get("json")).get();
         assertTrue(isValidJSON(json), "Output should be valid JSON");
         assertTrue(json.trim().startsWith("["), "Should be a JSON array");
 

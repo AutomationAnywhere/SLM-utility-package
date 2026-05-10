@@ -1,8 +1,10 @@
 package com.automationanywhere.botcommand;
 
 import com.automationanywhere.botcommand.data.Value;
-import com.automationanywhere.botcommand.data.impl.BooleanValue;
+import com.automationanywhere.botcommand.data.impl.DictionaryValue;
+import com.automationanywhere.botcommand.data.impl.StringValue;
 import com.automationanywhere.botcommand.exception.BotCommandException;
+import com.automationanywhere.botcommand.utils.DictionaryHelper;
 import com.automationanywhere.botcommand.utils.ModelManager;
 import com.automationanywhere.botcommand.utils.ModelDownloader;
 import com.automationanywhere.commandsdk.annotations.*;
@@ -16,9 +18,9 @@ import org.apache.logging.log4j.Logger;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 
-import static com.automationanywhere.commandsdk.model.DataType.BOOLEAN;
-import static com.automationanywhere.commandsdk.model.DataType.STRING;
+import static com.automationanywhere.commandsdk.model.DataType.DICTIONARY;
 
 /**
  * ValidateDevice Action
@@ -30,13 +32,15 @@ import static com.automationanywhere.commandsdk.model.DataType.STRING;
  * 1. Check if the model already exists locally
  * 2. If not, download it from HuggingFace (~669MB-5GB depending on model)
  * 3. Validate the model file is complete and accessible
- * 4. Return true if device is ready for inference
+ * 4. Return a Dictionary with model details and ready status
  *
  * Model storage locations:
  * - Windows: C:\Users\{username}\.aa-slm-models\
  * - macOS: /Users/{username}/.aa-slm-models/
  *
  * First-time download may take 5-15 minutes depending on internet speed.
+ *
+ * Return keys: supported, model_name, model_path, model_size_mb, status, message
  */
 @BotCommand
 @CommandPkg(
@@ -49,26 +53,18 @@ import static com.automationanywhere.commandsdk.model.DataType.STRING;
     text_color = "#2C3E50",
     background_color = "#3498DB",
     allowed_agent_targets = {
-//                AllowedTarget.HEADLESS,
             AllowedTarget.WINDOWS,
             AllowedTarget.MAC_OS
-//                AllowedTarget.ONDEMAND_CLOUD
     },
-    return_type = BOOLEAN,
+    return_type = DICTIONARY,
     return_required = true
 )
 public class ValidateDevice {
 
     private static final Logger logger = LogManager.getLogger(ValidateDevice.class);
 
-    /**
-     * Execute device validation and model download if needed
-     *
-     * @param modelName The model to download/validate
-     * @return True if device is ready (model downloaded and validated)
-     */
     @Execute
-    public Value<Boolean> execute(
+    public DictionaryValue execute(
 
         @Idx(index = "1", type = AttributeType.SELECT, options = {
             @Idx.Option(index = "1.1", pkg = @Pkg(label = "Qwen2.5 3B (Q4, ~2.1GB, 128K context)", value = "qwen2.5-3b")),
@@ -99,30 +95,24 @@ public class ValidateDevice {
 
             logger.info("Validating model: {} (~{}MB)", modelType.getId(), modelType.getSizeMB());
 
-            // Get model path
             ModelManager manager = ModelManager.getInstance();
             Path modelPath = manager.getModelPath(modelType);
-            Path modelDir = manager.getModelDirectory(modelType);
 
             logger.debug("Model path: {}", modelPath);
-            logger.debug("Model directory: {}", modelDir);
 
-            // Check if model already exists
             boolean modelExists = Files.exists(modelPath);
 
             if (modelExists) {
                 logger.info("Model already exists at: {}", modelPath);
 
-                // Validate file is accessible and has reasonable size
                 try {
                     long fileSize = Files.size(modelPath);
-                    long expectedMinSize = (long) modelType.getSizeMB() * 1024 * 1024 / 2; // At least 50% of expected size
+                    // Require at least 90% of expected size to consider the file complete
+                    long expectedMinSize = (long) modelType.getSizeMB() * 1024 * 1024 * 9 / 10;
 
                     if (fileSize < expectedMinSize) {
                         logger.warn("Model file exists but seems incomplete ({}MB, expected ~{}MB). Re-downloading...",
                             fileSize / 1024 / 1024, modelType.getSizeMB());
-
-                        // Delete incomplete file
                         Files.delete(modelPath);
                         modelExists = false;
                     } else {
@@ -135,7 +125,6 @@ public class ValidateDevice {
                 }
             }
 
-            // Download if needed
             if (!modelExists) {
                 logger.info("Model not found. Starting download (~{}MB)...", modelType.getSizeMB());
                 logger.info("This may take 5-15 minutes depending on internet speed.");
@@ -143,7 +132,6 @@ public class ValidateDevice {
                 try {
                     ModelDownloader.downloadModel(modelType);
                     logger.info("Model downloaded successfully to: {}", modelPath);
-
                 } catch (Exception e) {
                     logger.error("Model download failed", e);
                     throw new BotCommandException("Failed to download model: " + e.getMessage() +
@@ -151,21 +139,23 @@ public class ValidateDevice {
                 }
             }
 
-            // Final validation
             if (!Files.exists(modelPath)) {
                 throw new BotCommandException("Model validation failed: File does not exist after download");
             }
 
             long finalSize = Files.size(modelPath);
-            logger.info("Device validation complete. Model ready at: {} ({}MB)",
-                modelPath, finalSize / 1024 / 1024);
+            logger.info("Device validation complete. Model ready at: {} ({}MB)", modelPath, finalSize / 1024 / 1024);
 
-            return new BooleanValue(true);
+            LinkedHashMap<String, Value<?>> fields = new LinkedHashMap<>();
+            fields.put("supported", new StringValue("true"));
+            fields.put("model_name", new StringValue(modelType.getId()));
+            fields.put("model_path", new StringValue(modelPath.toString()));
+            fields.put("model_size_mb", new StringValue(String.valueOf(finalSize / 1024 / 1024)));
+            return DictionaryHelper.success(fields,
+                "Model " + modelType.getId() + " is ready (" + (finalSize / 1024 / 1024) + "MB)");
 
         } catch (BotCommandException e) {
-            // Re-throw bot command exceptions
             throw e;
-
         } catch (Exception e) {
             logger.error("ValidateDevice action failed", e);
             throw new BotCommandException("Device validation failed: " + e.getMessage(), e);

@@ -49,6 +49,21 @@ configure(allprojects){
 		generatePackageWithDateTime = true
 	}
 
+	def versionPropsFile = rootProject.file('src/main/resources/version.properties')
+
+	task incrementBuildNumber {
+		doFirst {
+			def props = new Properties()
+			versionPropsFile.withInputStream { props.load(it) }
+			def buildNum = (props['build.number'] as Integer) + 1
+			props['build.number'] = buildNum.toString()
+			versionPropsFile.withOutputStream { props.store(it, null) }
+			println "Build number incremented to: ${buildNum}"
+		}
+	}
+
+	processResources.dependsOn incrementBuildNumber
+
 	classes.dependsOn commandCodeGen
 
 	shadowJar {

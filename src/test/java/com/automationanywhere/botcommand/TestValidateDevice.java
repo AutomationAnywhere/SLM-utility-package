@@ -1,6 +1,7 @@
 package com.automationanywhere.botcommand;
 
-import com.automationanywhere.botcommand.data.Value;
+import com.automationanywhere.botcommand.data.impl.DictionaryValue;
+import com.automationanywhere.botcommand.data.impl.StringValue;
 import com.automationanywhere.botcommand.utils.ModelManager;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
@@ -120,15 +121,15 @@ public class TestValidateDevice {
         try {
             long startTime = System.currentTimeMillis();
 
-            Value<Boolean> result = validateAction.execute("qwen2.5-3b");
+            DictionaryValue result = validateAction.execute("qwen2.5-3b");
 
             long elapsed = System.currentTimeMillis() - startTime;
 
             System.out.println("\n✓ Validation completed in " + elapsed + "ms");
-            System.out.println("Device ready: " + result.get());
+            System.out.println("Device ready: " + ((StringValue) result.get("supported")).get());
 
             assertNotNull(result, "Result should not be null");
-            assertTrue(result.get(), "Device should be ready after validation");
+            assertTrue("true".equals(((StringValue) result.get("supported")).get()), "Device should be ready after validation");
 
             // Verify model file exists
             ModelManager manager = ModelManager.getInstance();
@@ -165,14 +166,14 @@ public class TestValidateDevice {
 
             long startTime = System.currentTimeMillis();
 
-            Value<Boolean> result = validateAction.execute("qwen2.5-3b");
+            DictionaryValue result = validateAction.execute("qwen2.5-3b");
 
             long elapsed = System.currentTimeMillis() - startTime;
 
             System.out.println("\n✓ Validation completed in " + elapsed + "ms");
-            System.out.println("Device ready: " + result.get());
+            System.out.println("Device ready: " + ((StringValue) result.get("supported")).get());
 
-            assertTrue(result.get(), "Device should be ready");
+            assertTrue("true".equals(((StringValue) result.get("supported")).get()), "Device should be ready");
             assertTrue(elapsed < 5000, "Should be fast for existing model (< 5 seconds)");
 
         } catch (Exception e) {
