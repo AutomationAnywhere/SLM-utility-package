@@ -4,6 +4,7 @@ import com.automationanywhere.botcommand.data.Value;
 import com.automationanywhere.botcommand.data.impl.DictionaryValue;
 import com.automationanywhere.botcommand.data.impl.StringValue;
 import com.automationanywhere.botcommand.exception.BotCommandException;
+import com.automationanywhere.botcommand.utils.ActionUtils;
 import com.automationanywhere.botcommand.utils.DictionaryHelper;
 import com.automationanywhere.botcommand.utils.ModelManager;
 import com.automationanywhere.botcommand.utils.LlamaInference;
@@ -158,15 +159,7 @@ public class TransformToJSON {
                 timeoutSeconds = 30.0;
             }
 
-            // Parse model type
-            ModelManager.ModelType modelType;
-            try {
-                modelType = ModelManager.ModelType.fromId(modelName.toLowerCase().trim());
-            } catch (IllegalArgumentException e) {
-                logger.error("Invalid model name: {}", modelName);
-                throw new BotCommandException("Invalid model name: " + modelName +
-                    ". Valid options: " + ModelManager.ModelType.supportedModelIds());
-            }
+            ModelManager.ModelType modelType = ActionUtils.resolveModelType(modelName);
 
             logger.debug("Using model: {} for text length: {}", modelType.getId(), inputText.length());
 
