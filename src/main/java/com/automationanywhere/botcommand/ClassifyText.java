@@ -168,9 +168,7 @@ public class ClassifyText {
             String category = ((StringValue) resultFields.get("category")).get();
             logger.info("Classification completed in {}ms. Result: {}", totalTime, category);
 
-            String message = String.format("Classified as '%s' in %dms using %s",
-                category, totalTime, modelType.getId());
-            return DictionaryHelper.success(resultFields, message);
+            return DictionaryHelper.success(resultFields, modelType.getId(), totalTime);
 
         } catch (BotCommandException e) {
             throw e;

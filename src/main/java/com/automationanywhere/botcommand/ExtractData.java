@@ -161,9 +161,7 @@ public class ExtractData {
             logger.info("Extraction completed in {}ms. {}/{} fields found.",
                 totalTime, foundCount, extracted.size());
 
-            String message = String.format("Extracted %d/%d fields in %dms using %s",
-                foundCount, extracted.size(), totalTime, modelType.getId());
-            return DictionaryHelper.success(extracted, message);
+            return DictionaryHelper.success(extracted, modelType.getId(), totalTime);
 
         } catch (BotCommandException e) {
             throw e;

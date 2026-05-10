@@ -174,9 +174,7 @@ public class RedactPII {
             LinkedHashMap<String, Value<?>> fields = new LinkedHashMap<>();
             fields.put("redacted_text", new StringValue(redactedText));
             fields.put("items_redacted", new StringValue(String.valueOf(itemsRedacted)));
-            String message = String.format("Redacted %d item(s) in %dms using %s",
-                itemsRedacted, totalTime, modelType.getId());
-            return DictionaryHelper.success(fields, message);
+            return DictionaryHelper.success(fields, modelType.getId(), totalTime);
 
         } catch (BotCommandException e) {
             throw e;

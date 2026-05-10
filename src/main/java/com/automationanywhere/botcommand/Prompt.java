@@ -191,9 +191,7 @@ public class Prompt {
 
             LinkedHashMap<String, Value<?>> fields = new LinkedHashMap<>();
             fields.put("response", new StringValue(cleaned));
-            fields.put("model", new StringValue(modelType.getId()));
-            return DictionaryHelper.success(fields,
-                String.format("Generated in %dms using %s", totalTime, modelType.getId()));
+            return DictionaryHelper.success(fields, modelType.getId(), totalTime);
 
         } catch (Exception e) {
             logger.error("Prompt action failed", e);

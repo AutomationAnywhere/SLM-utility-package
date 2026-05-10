@@ -242,12 +242,12 @@ public class ModelManager {
             logger.info("Loading on OS: {}, Architecture: {}", os, arch);
 
             try {
-                // Set a reasonable context size to avoid excessive memory allocation
-                // For Qwen2.5 with 128K max context, we limit to 8K for practical use
-                // This prevents huge KV cache allocation that causes timeouts
-                int contextSize = Math.min(modelType.getContextWindow(), 8192);
-                if (modelType.getContextWindow() > 8192) {
-                    logger.info("Limiting context size to 8192 (model supports up to {})", modelType.getContextWindow());
+                // 8K-native models (Gemma-2B, Llama-3.2-3B) load at their full native context.
+                // 128K models (Qwen2.5, Phi-3.5, Gemma4, DeepSeek-R1) are capped at 32K —
+                // enough for long documents without the memory/latency cost of a full 128K KV cache.
+                int contextSize = Math.min(modelType.getContextWindow(), 32768);
+                if (modelType.getContextWindow() > 32768) {
+                    logger.info("Capping context to 32768 tokens (model supports up to {})", modelType.getContextWindow());
                 }
 
                 // Create model parameters (CPU-only, no GPU layers)

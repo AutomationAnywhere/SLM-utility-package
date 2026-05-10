@@ -161,9 +161,7 @@ public class SummarizeText {
             LinkedHashMap<String, Value<?>> fields = new LinkedHashMap<>();
             fields.put("summary", new StringValue(summary));
             fields.put("word_count", new StringValue(String.valueOf(wordCount)));
-            String message = String.format("Summarized to %d words in %dms using %s",
-                wordCount, totalTime, modelType.getId());
-            return DictionaryHelper.success(fields, message);
+            return DictionaryHelper.success(fields, modelType.getId(), totalTime);
 
         } catch (BotCommandException e) {
             throw e;

@@ -93,6 +93,7 @@ public class ValidateDevice {
                     ". Valid options: " + ModelManager.ModelType.supportedModelIds());
             }
 
+            long startTime = System.currentTimeMillis();
             logger.info("Validating model: {} (~{}MB)", modelType.getId(), modelType.getSizeMB());
 
             ModelManager manager = ModelManager.getInstance();
@@ -151,8 +152,7 @@ public class ValidateDevice {
             fields.put("model_name", new StringValue(modelType.getId()));
             fields.put("model_path", new StringValue(modelPath.toString()));
             fields.put("model_size_mb", new StringValue(String.valueOf(finalSize / 1024 / 1024)));
-            return DictionaryHelper.success(fields,
-                "Model " + modelType.getId() + " is ready (" + (finalSize / 1024 / 1024) + "MB)");
+            return DictionaryHelper.success(fields, modelType.getId(), System.currentTimeMillis() - startTime);
 
         } catch (BotCommandException e) {
             throw e;

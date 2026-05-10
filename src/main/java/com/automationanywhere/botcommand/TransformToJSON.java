@@ -198,8 +198,7 @@ public class TransformToJSON {
             long totalTime = System.currentTimeMillis() - startTime;
             logger.info("Transformation completed in {}ms. Output length: {} chars", totalTime, jsonResult.length());
 
-            return DictionaryHelper.success("json", jsonResult,
-                String.format("Transformed to JSON in %dms using %s", totalTime, modelType.getId()));
+            return DictionaryHelper.success("json", jsonResult, modelType.getId(), totalTime);
 
         } catch (Exception e) {
             logger.error("TransformToJSON action failed", e);

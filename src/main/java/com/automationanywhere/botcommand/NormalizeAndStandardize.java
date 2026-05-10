@@ -134,6 +134,10 @@ public class NormalizeAndStandardize {
         logger.info("NormalizeAndStandardize action started - Model: {}, DataType: {}, Format: {}, Timeout: {}s",
                     modelName, dataType, outputFormat, timeoutSeconds);
 
+        // Declared outside try so they're accessible in the preserveOriginalOnFailure catch path
+        ModelManager.ModelType modelType = null;
+        long startTime = System.currentTimeMillis();
+
         try {
             // Validate inputs
             if (inputText == null || inputText.trim().isEmpty()) {
@@ -153,7 +157,6 @@ public class NormalizeAndStandardize {
             }
 
             // Parse model type
-            ModelManager.ModelType modelType;
             try {
                 modelType = ModelManager.ModelType.fromId(modelName.toLowerCase().trim());
             } catch (IllegalArgumentException e) {
@@ -165,7 +168,7 @@ public class NormalizeAndStandardize {
             logger.debug("Using model: {} for text length: {}", modelType.getId(), inputText.length());
 
             // Initialize inference engine (will load model if needed)
-            long startTime = System.currentTimeMillis();
+            startTime = System.currentTimeMillis();
             LlamaInference inference = new LlamaInference(modelType);
             long loadTime = System.currentTimeMillis() - startTime;
 
@@ -197,8 +200,7 @@ public class NormalizeAndStandardize {
             fields.put("result", new StringValue(result));
             fields.put("original", new StringValue(inputText));
             fields.put("data_type", new StringValue(dataType));
-            String message = String.format("Normalized in %dms using %s", totalTime, modelType.getId());
-            return DictionaryHelper.success(fields, message);
+            return DictionaryHelper.success(fields, modelType.getId(), totalTime);
 
         } catch (Exception e) {
             logger.error("NormalizeAndStandardize action failed", e);
@@ -210,7 +212,8 @@ public class NormalizeAndStandardize {
                 fields.put("result", new StringValue(inputText));
                 fields.put("original", new StringValue(inputText));
                 fields.put("data_type", new StringValue(dataType != null ? dataType : "unknown"));
-                return DictionaryHelper.success(fields, "Returning original text due to failure: " + e.getMessage());
+                String resolvedModel = modelType != null ? modelType.getId() : modelName;
+                return DictionaryHelper.success(fields, resolvedModel, System.currentTimeMillis() - startTime);
             }
 
             // Provide helpful error messages
