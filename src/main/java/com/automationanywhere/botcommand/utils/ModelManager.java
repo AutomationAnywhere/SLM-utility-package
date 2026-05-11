@@ -45,28 +45,28 @@ public class ModelManager {
      * - prompt template profile
      */
     public enum ModelType {
-        // Gemma 2 2B - Q4_K_M quantization (~1.7GB)
-        GEMMA_2B(
-            "gemma-2b",
-            "gemma-2b-q4",
-            "gemma-2-2b-it-Q4_K_M.gguf",
-            "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf",
-            1700,
+        // Gemma 3 4B IT - Q4_K_M quantization (~2.49GB, 128K context)
+        GEMMA3_4B(
+            "gemma3-4b",
+            "gemma3-4b-q4",
+            "gemma-3-4b-it-Q4_K_M.gguf",
+            "https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf",
+            2490,
+            131072,
             8192,
-            4096,
-            PromptTemplate.RAW
+            PromptTemplate.GEMMA3
         ),
 
-        // Qwen2.5 3B - Q4_K_M quantization (~2.1GB, optimized for structured data/JSON)
-        QWEN2_5_3B(
-            "qwen2.5-3b",
-            "qwen2.5-3b-q4",
-            "qwen2.5-3b-instruct-q4_k_m.gguf",
-            "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf",
-            2100,
-            131072,
-            4096,
-            PromptTemplate.CHATML
+        // Qwen3 4B - Q4_K_M quantization (~2.5GB, 32K native context, ChatML + /no_think)
+        QWEN3_4B(
+            "qwen3-4b",
+            "qwen3-4b-q4",
+            "Qwen3-4B-Q4_K_M.gguf",
+            "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf",
+            2500,
+            32768,
+            8192,
+            PromptTemplate.CHATML_QWEN3
         ),
 
         // Llama 3.2 3B Instruct - Q4_K_M quantization (~2.0GB)
@@ -81,19 +81,19 @@ public class ModelManager {
             PromptTemplate.RAW
         ),
 
-        // Phi-3.5 Mini Instruct - Q4_K_M quantization (~2.23GB)
-        PHI3_5_MINI(
-            "phi3.5-mini",
-            "phi3.5-mini-q4",
-            "Phi-3.5-mini-instruct.Q4_K_M.gguf",
-            "https://huggingface.co/RichardErkhov/microsoft_-_Phi-3.5-mini-instruct-gguf/resolve/main/Phi-3.5-mini-instruct.Q4_K_M.gguf",
-            2230,
+        // Phi-4 Mini Instruct - Q4_K_M quantization (~2.49GB, 128K context)
+        PHI4_MINI(
+            "phi4-mini",
+            "phi4-mini-q4",
+            "microsoft_Phi-4-mini-instruct-Q4_K_M.gguf",
+            "https://huggingface.co/bartowski/microsoft_Phi-4-mini-instruct-GGUF/resolve/main/microsoft_Phi-4-mini-instruct-Q4_K_M.gguf",
+            2490,
             131072,
             8192,
-            PromptTemplate.RAW
+            PromptTemplate.PHI4
         ),
 
-        // Gemma 4 E2B Instruct - Q4_K_M quantization (~3.11GB, 5.1B params, ~2.3B active)
+        // Gemma 4 E2B Instruct - Q4_K_M quantization (~3.11GB, dense 2B effective params with PLE)
         GEMMA4_E2B(
             "gemma4-e2b",
             "gemma4-e2b-q4",
@@ -120,7 +120,10 @@ public class ModelManager {
         public enum PromptTemplate {
             RAW,
             CHATML,
-            GEMMA4
+            CHATML_QWEN3,   // ChatML + /no_think suffix to disable Qwen3 thinking mode
+            GEMMA3,
+            GEMMA4,
+            PHI4
         }
 
         private final String id;
@@ -242,9 +245,9 @@ public class ModelManager {
             logger.info("Loading on OS: {}, Architecture: {}", os, arch);
 
             try {
-                // 8K-native models (Gemma-2B, Llama-3.2-3B) load at their full native context.
-                // 128K models (Qwen2.5, Phi-3.5, Gemma4, DeepSeek-R1) are capped at 32K —
-                // enough for long documents without the memory/latency cost of a full 128K KV cache.
+                // Llama-3.2-3B (8K native) loads at its full native context.
+                // 128K models (Gemma3, Phi-4, Gemma4, DeepSeek-R1) and Qwen3 (32K native)
+                // are capped at 32K — enough for long documents without a full 128K KV cache cost.
                 int contextSize = Math.min(modelType.getContextWindow(), 32768);
                 if (modelType.getContextWindow() > 32768) {
                     logger.info("Capping context to 32768 tokens (model supports up to {})", modelType.getContextWindow());

@@ -111,7 +111,7 @@ public class TestSummarizeTextParsing {
 
     @Test
     public void testAllModelsHavePositiveOutputTokenLimit() {
-        String[] models = {"qwen2.5-3b", "llama3.2-3b", "phi3.5-mini", "gemma-2b", "gemma4-e2b", "deepseek-r1-1.5b"};
+        String[] models = {"qwen3-4b", "llama3.2-3b", "phi4-mini", "gemma3-4b", "gemma4-e2b", "deepseek-r1-1.5b"};
         for (String modelId : models) {
             ModelManager.ModelType type = ModelManager.ModelType.fromId(modelId);
             int effective = Math.min(SummarizeText.MAX_OUTPUT_TOKENS_DETAILED, type.getMaxOutputTokens());

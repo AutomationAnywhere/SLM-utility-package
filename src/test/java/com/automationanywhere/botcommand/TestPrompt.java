@@ -39,7 +39,7 @@ public class TestPrompt {
 
         boolean exceptionThrown = false;
         try {
-            promptAction.execute("", "qwen2.5-3b", 30.0, 0.3);
+            promptAction.execute("", "qwen3-4b", 30.0, 0.3);
         } catch (Exception e) {
             System.out.println("Expected error: " + e.getMessage());
             exceptionThrown = true;
@@ -74,7 +74,7 @@ public class TestPrompt {
     public void testAllSupportedModels() {
         System.out.println("\n[TEST] All supported models");
 
-        String[] models = {"qwen2.5-3b", "llama3.2-3b", "phi3.5-mini", "gemma-2b", "gemma4-e2b", "deepseek-r1-1.5b"};
+        String[] models = {"qwen3-4b", "llama3.2-3b", "phi4-mini", "gemma3-4b", "gemma4-e2b", "deepseek-r1-1.5b"};
 
         for (String model : models) {
             System.out.println("Testing model: " + model);
@@ -102,7 +102,7 @@ public class TestPrompt {
 
         DictionaryValue result = promptAction.execute(
             prompt,
-            "qwen2.5-3b",
+            "qwen3-4b",
             60.0,
             0.3
         );
@@ -139,7 +139,7 @@ public class TestPrompt {
 
         DictionaryValue result = promptAction.execute(
             prompt,
-            "qwen2.5-3b",
+            "qwen3-4b",
             30.0,
             0.3
         );
@@ -178,7 +178,7 @@ public class TestPrompt {
 
         DictionaryValue result = promptAction.execute(
             prompt,
-            "qwen2.5-3b",
+            "qwen3-4b",
             30.0,
             0.3
         );

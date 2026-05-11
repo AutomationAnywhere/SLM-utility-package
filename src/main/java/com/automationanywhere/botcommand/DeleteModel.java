@@ -69,14 +69,14 @@ public class DeleteModel {
     public Value<Boolean> execute(
 
         @Idx(index = "1", type = AttributeType.SELECT, options = {
-            @Idx.Option(index = "1.1", pkg = @Pkg(label = "Qwen2.5 3B (Q4, ~2.1GB, 128K context)", value = "qwen2.5-3b")),
-            @Idx.Option(index = "1.2", pkg = @Pkg(label = "Llama 3.2 3B (Q4, ~2.0GB)", value = "llama3.2-3b")),
-            @Idx.Option(index = "1.3", pkg = @Pkg(label = "Phi-3.5 Mini (Q4, ~2.23GB, 128K context)", value = "phi3.5-mini")),
-            @Idx.Option(index = "1.4", pkg = @Pkg(label = "Gemma 2B (Q4, ~1.7GB)", value = "gemma-2b")),
-            @Idx.Option(index = "1.5", pkg = @Pkg(label = "Gemma 4 E2B (Q4, ~3.1GB, 128K context)", value = "gemma4-e2b")),
-            @Idx.Option(index = "1.6", pkg = @Pkg(label = "DeepSeek R1 1.5B (Q4, ~1.1GB, reasoning)", value = "deepseek-r1-1.5b"))
+            @Idx.Option(index = "1.1", pkg = @Pkg(label = "Qwen3 4B (Q4, ~2.5GB, 32K ctx) — best for structured output", value = "qwen3-4b")),
+            @Idx.Option(index = "1.2", pkg = @Pkg(label = "Llama 3.2 3B (Q4, ~2.0GB, 8K ctx) — fast, proven baseline", value = "llama3.2-3b")),
+            @Idx.Option(index = "1.3", pkg = @Pkg(label = "Phi-4 Mini (Q4, ~2.5GB, 128K ctx) — best for instructions & reasoning", value = "phi4-mini")),
+            @Idx.Option(index = "1.4", pkg = @Pkg(label = "Gemma 3 4B (Q4, ~2.5GB, 128K ctx) — balanced all-rounder", value = "gemma3-4b")),
+            @Idx.Option(index = "1.5", pkg = @Pkg(label = "Gemma 4 E2B (Q4, ~3.1GB, 128K ctx) — highest quality", value = "gemma4-e2b")),
+            @Idx.Option(index = "1.6", pkg = @Pkg(label = "DeepSeek R1 1.5B (Q4, ~1.1GB, 128K ctx) — fastest, chain-of-thought", value = "deepseek-r1-1.5b"))
         })
-        @Pkg(label = "Model", description = "Small Language Model to delete from local storage (curated top models under 3GB).", default_value = "qwen2.5-3b", default_value_type = DataType.STRING)
+        @Pkg(label = "Model", description = "Small Language Model to delete from local storage (curated top models under 3GB).", default_value = "qwen3-4b", default_value_type = DataType.STRING)
         @NotEmpty
         String modelName
 

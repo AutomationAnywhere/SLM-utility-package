@@ -40,7 +40,7 @@ public class TestClassifyText {
         System.out.println("\n[TEST] Empty text validation");
 
         try {
-            classifyAction.execute("", "urgent, normal, low", "qwen2.5-3b", false, false, 30.0);
+            classifyAction.execute("", "urgent, normal, low", "qwen3-4b", false, false, 30.0);
             fail("Should throw exception for empty text");
 
         } catch (Exception e) {
@@ -57,7 +57,7 @@ public class TestClassifyText {
         System.out.println("\n[TEST] Empty categories validation");
 
         try {
-            classifyAction.execute("Test message", "", "qwen2.5-3b", false, false, 30.0);
+            classifyAction.execute("Test message", "", "qwen3-4b", false, false, 30.0);
             fail("Should throw exception for empty categories");
 
         } catch (Exception e) {
@@ -90,7 +90,7 @@ public class TestClassifyText {
     public void testAllSupportedModels() {
         System.out.println("\n[TEST] All supported models");
 
-        String[] models = {"qwen2.5-3b", "llama3.2-3b", "phi3.5-mini", "gemma-2b"};
+        String[] models = {"qwen3-4b", "llama3.2-3b", "phi4-mini", "gemma3-4b"};
 
         for (String model : models) {
             System.out.println("Testing model: " + model);
@@ -130,7 +130,7 @@ public class TestClassifyText {
             DictionaryValue result = classifyAction.execute(
                 urgentText,
                 "urgent, normal, low_priority",
-                "qwen2.5-3b",
+                "qwen3-4b",
                 false,
                 false,
                 60.0
@@ -164,7 +164,7 @@ public class TestClassifyText {
             DictionaryValue result = classifyAction.execute(
                 positiveText,
                 "positive, negative, neutral",
-                "qwen2.5-3b",
+                "qwen3-4b",
                 true,  // include confidence
                 true,  // include explanation
                 45.0

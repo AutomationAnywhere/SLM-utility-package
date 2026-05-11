@@ -89,7 +89,7 @@ public class TestValidateDevice {
         ModelManager manager = ModelManager.getInstance();
 
         // Check Qwen2.5-3B
-        Path tinyLlamaPath = manager.getModelPath(ModelManager.ModelType.QWEN2_5_3B);
+        Path tinyLlamaPath = manager.getModelPath(ModelManager.ModelType.QWEN3_4B);
         boolean exists = Files.exists(tinyLlamaPath);
 
         System.out.println("Qwen2.5-3B path: " + tinyLlamaPath);
@@ -121,7 +121,7 @@ public class TestValidateDevice {
         try {
             long startTime = System.currentTimeMillis();
 
-            DictionaryValue result = validateAction.execute("qwen2.5-3b");
+            DictionaryValue result = validateAction.execute("qwen3-4b");
 
             long elapsed = System.currentTimeMillis() - startTime;
 
@@ -133,7 +133,7 @@ public class TestValidateDevice {
 
             // Verify model file exists
             ModelManager manager = ModelManager.getInstance();
-            Path modelPath = manager.getModelPath(ModelManager.ModelType.QWEN2_5_3B);
+            Path modelPath = manager.getModelPath(ModelManager.ModelType.QWEN3_4B);
             assertTrue(Files.exists(modelPath), "Model file should exist after validation");
 
             // Verify file size
@@ -157,7 +157,7 @@ public class TestValidateDevice {
 
         try {
             ModelManager manager = ModelManager.getInstance();
-            Path modelPath = manager.getModelPath(ModelManager.ModelType.QWEN2_5_3B);
+            Path modelPath = manager.getModelPath(ModelManager.ModelType.QWEN3_4B);
 
             if (!Files.exists(modelPath)) {
                 System.out.println("Model not found, skipping test");
@@ -166,7 +166,7 @@ public class TestValidateDevice {
 
             long startTime = System.currentTimeMillis();
 
-            DictionaryValue result = validateAction.execute("qwen2.5-3b");
+            DictionaryValue result = validateAction.execute("qwen3-4b");
 
             long elapsed = System.currentTimeMillis() - startTime;
 
@@ -189,7 +189,7 @@ public class TestValidateDevice {
     public void testAllModelTypesSupported() {
         System.out.println("\n[TEST] All model types supported");
 
-        String[] models = {"qwen2.5-3b", "llama3.2-3b", "phi3.5-mini", "gemma-2b", "gemma4-e2b", "deepseek-r1-1.5b"};
+        String[] models = {"qwen3-4b", "llama3.2-3b", "phi4-mini", "gemma3-4b", "gemma4-e2b", "deepseek-r1-1.5b"};
 
         for (String model : models) {
             System.out.println("Testing model: " + model);

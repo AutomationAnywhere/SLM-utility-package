@@ -47,8 +47,8 @@ public class TestQwen25 {
         System.out.println("[TEST 1] Validate Qwen2.5-3B Model Availability");
         System.out.println("-".repeat(80));
 
-        System.out.println("Checking if qwen2.5-3b is in ModelType enum...");
-        ModelManager.ModelType type = ModelManager.ModelType.fromId("qwen2.5-3b");
+        System.out.println("Checking if qwen3-4b is in ModelType enum...");
+        ModelManager.ModelType type = ModelManager.ModelType.fromId("qwen3-4b");
         assertNotNull(type, "Qwen2.5-3B should be in ModelType enum");
 
         System.out.println("✓ Model ID: " + type.getId());
@@ -71,7 +71,7 @@ public class TestQwen25 {
 
         long startTime = System.currentTimeMillis();
 
-        DictionaryValue result = validateAction.execute("qwen2.5-3b");
+        DictionaryValue result = validateAction.execute("qwen3-4b");
 
         long elapsed = System.currentTimeMillis() - startTime;
 
@@ -101,7 +101,7 @@ public class TestQwen25 {
         try {
             DictionaryValue result = promptAction.execute(
                 prompt,
-                "qwen2.5-3b",
+                "qwen3-4b",
                 120.0,  // 2 minute timeout
                 0.3
             );
@@ -149,7 +149,7 @@ public class TestQwen25 {
         try {
             DictionaryValue result = promptAction.execute(
                 prompt,
-                "qwen2.5-3b",
+                "qwen3-4b",
                 120.0,
                 0.2  // Low temperature for structured output
             );
@@ -197,7 +197,7 @@ public class TestQwen25 {
         try {
             DictionaryValue result = promptAction.execute(
                 prompt,
-                "qwen2.5-3b",
+                "qwen3-4b",
                 120.0,
                 0.7
             );

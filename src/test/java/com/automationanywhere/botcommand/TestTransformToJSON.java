@@ -44,7 +44,7 @@ public class TestTransformToJSON {
         System.out.println("\n[TEST] Empty text validation");
 
         try {
-            transformAction.execute("", "csv", "compact", "array", "qwen2.5-3b", 30.0);
+            transformAction.execute("", "csv", "compact", "array", "qwen3-4b", 30.0);
             fail("Should throw exception for empty text");
 
         } catch (Exception e) {
@@ -77,7 +77,7 @@ public class TestTransformToJSON {
     public void testAllSupportedModels() {
         System.out.println("\n[TEST] All supported models");
 
-        String[] models = {"qwen2.5-3b", "llama3.2-3b", "phi3.5-mini", "gemma-2b"};
+        String[] models = {"qwen3-4b", "llama3.2-3b", "phi4-mini", "gemma3-4b"};
 
         for (String model : models) {
             System.out.println("Testing model: " + model);
@@ -128,7 +128,7 @@ public class TestTransformToJSON {
             "csv",
             "compact",
             "array",
-            "qwen2.5-3b",
+            "qwen3-4b",
             60.0
         );
 
@@ -159,7 +159,7 @@ public class TestTransformToJSON {
             "key-value",
             "compact",
             "object",
-            "qwen2.5-3b",
+            "qwen3-4b",
             60.0
         );
 
@@ -185,7 +185,7 @@ public class TestTransformToJSON {
             "list",
             "compact",
             "array",
-            "qwen2.5-3b",
+            "qwen3-4b",
             45.0
         );
 
@@ -220,7 +220,7 @@ public class TestTransformToJSON {
             "csv",
             "compact",
             "array",
-            "gemma-2b",
+            "gemma3-4b",
             60.0
         );
 
@@ -255,7 +255,7 @@ public class TestTransformToJSON {
             "key-value",
             "compact",
             "object",
-            "gemma-2b",
+            "gemma3-4b",
             60.0
         );
 
@@ -287,7 +287,7 @@ public class TestTransformToJSON {
             "list",
             "compact",
             "array",
-            "gemma-2b",
+            "gemma3-4b",
             45.0
         );
 

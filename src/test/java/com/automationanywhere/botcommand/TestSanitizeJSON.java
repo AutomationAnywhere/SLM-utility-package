@@ -58,7 +58,7 @@ public class TestSanitizeJSON {
         assertTrue(cacheDir.isAbsolute(), "Model cache path should be absolute");
 
         // Check model subdirectories
-        Path tinyLlamaDir = cacheDir.resolve("qwen2.5-3b-q8");
+        Path tinyLlamaDir = cacheDir.resolve("qwen3-4b-q4");
         Path phi2Dir = cacheDir.resolve("phi2-q4");
 
         System.out.println("Qwen2.5-3B dir: " + tinyLlamaDir);
@@ -371,7 +371,7 @@ public class TestSanitizeJSON {
 
         try {
             ModelManager manager = ModelManager.getInstance();
-            boolean loaded = manager.isModelLoaded(ModelManager.ModelType.QWEN2_5_3B);
+            boolean loaded = manager.isModelLoaded(ModelManager.ModelType.QWEN3_4B);
 
             System.out.println("\nQwen2.5-3B model loaded in memory: " + loaded);
 
@@ -379,7 +379,7 @@ public class TestSanitizeJSON {
                 System.out.println("\nThe model remains in memory for subsequent use.");
                 System.out.println("This makes follow-up calls much faster!");
                 System.out.println("\nTo free memory, call:");
-                System.out.println("  manager.unloadModel(ModelManager.ModelType.QWEN2_5_3B)");
+                System.out.println("  manager.unloadModel(ModelManager.ModelType.QWEN3_4B)");
             }
 
             // Just verify we can check status without errors

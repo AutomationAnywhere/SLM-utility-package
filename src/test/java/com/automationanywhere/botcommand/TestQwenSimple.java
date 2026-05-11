@@ -27,7 +27,7 @@ public class TestQwenSimple {
     public void testQwenWithChatTemplate() throws Exception {
         System.out.println("\n[TEST] Qwen2.5 with proper chat template");
 
-        ModelManager.ModelType modelType = ModelManager.ModelType.QWEN2_5_3B;
+        ModelManager.ModelType modelType = ModelManager.ModelType.QWEN3_4B;
         ModelManager manager = ModelManager.getInstance();
 
         // Get the model
@@ -83,7 +83,7 @@ public class TestQwenSimple {
     public void testQwenWithoutChatTemplate() throws Exception {
         System.out.println("\n[TEST] Qwen2.5 WITHOUT chat template (will likely fail)");
 
-        ModelManager.ModelType modelType = ModelManager.ModelType.QWEN2_5_3B;
+        ModelManager.ModelType modelType = ModelManager.ModelType.QWEN3_4B;
         ModelManager manager = ModelManager.getInstance();
 
         var model = manager.getModel(modelType);

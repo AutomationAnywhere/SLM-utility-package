@@ -267,7 +267,8 @@ public class LlamaInference {
         // If prompt already has chat template markers, don't wrap again
         if (prompt.contains("<|im_start|>") || prompt.contains("<|system|>") ||
             prompt.contains("<|user|>") || prompt.contains("<|assistant|>") ||
-            prompt.contains("<|turn>")) {
+            prompt.contains("<|turn>") || prompt.contains("<start_of_turn>") ||
+            prompt.contains("<|end|>")) {
             logger.debug("Prompt already contains chat template markers, using as-is");
             return prompt;
         }
@@ -282,6 +283,26 @@ public class LlamaInference {
             return formatted;
         }
 
+        if (modelType.getPromptTemplate() == ModelManager.ModelType.PromptTemplate.CHATML_QWEN3) {
+            // Qwen3 defaults to thinking mode (produces <think>...</think> blocks).
+            // Appending /no_think disables it so we get direct, structured answers.
+            String formatted = "<|im_start|>system\n" +
+                "You are a helpful assistant.<|im_end|>\n" +
+                "<|im_start|>user\n" +
+                prompt + " /no_think<|im_end|>\n" +
+                "<|im_start|>assistant\n";
+            logger.debug("Applied Qwen3 ChatML (no-think) template for model: {}", modelType.getId());
+            return formatted;
+        }
+
+        if (modelType.getPromptTemplate() == ModelManager.ModelType.PromptTemplate.GEMMA3) {
+            String formatted = "<start_of_turn>user\n" +
+                prompt + "<end_of_turn>\n" +
+                "<start_of_turn>model\n";
+            logger.debug("Applied Gemma 3 template for model: {}", modelType.getId());
+            return formatted;
+        }
+
         if (modelType.getPromptTemplate() == ModelManager.ModelType.PromptTemplate.GEMMA4) {
             String formatted = "<|turn>system\n" +
                 "You are a helpful assistant<turn|>\n" +
@@ -289,6 +310,15 @@ public class LlamaInference {
                 prompt + "<turn|>\n" +
                 "<|turn>model\n";
             logger.debug("Applied Gemma 4 template for model: {}", modelType.getId());
+            return formatted;
+        }
+
+        if (modelType.getPromptTemplate() == ModelManager.ModelType.PromptTemplate.PHI4) {
+            String formatted = "<|system|>\nYou are a helpful assistant<|end|>\n" +
+                "<|user|>\n" +
+                prompt + "<|end|>\n" +
+                "<|assistant|>\n";
+            logger.debug("Applied Phi-4 template for model: {}", modelType.getId());
             return formatted;
         }
 
