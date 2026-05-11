@@ -1,8 +1,8 @@
 package com.automationanywhere.botcommand;
 
 import com.automationanywhere.botcommand.data.Value;
-import com.automationanywhere.botcommand.utils.ModelManager;
 import com.automationanywhere.botcommand.utils.LlamaInference;
+import com.automationanywhere.botcommand.utils.ModelManager;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
@@ -278,11 +278,7 @@ public class TestSanitizeJSON {
 
             long startTime = System.currentTimeMillis();
 
-            Value<String> result = sanitizeAction.execute(
-                jsonInput,    // inputText
-                "qwen2.5-3b",  // modelName
-                60.0          // timeoutSeconds
-            );
+            Value<String> result = sanitizeAction.execute(jsonInput);
 
             long elapsed = System.currentTimeMillis() - startTime;
 
@@ -315,34 +311,16 @@ public class TestSanitizeJSON {
         String complexInput = "API Error: \"Connection timeout\" at line 42\nStack trace:\n\tat com.example.Main";
         System.out.println("Input: " + complexInput);
 
-        try {
-            System.out.println("\nRunning inference...");
-            System.out.println("(Model already loaded, should be faster)\n");
+        Value<String> result = sanitizeAction.execute(complexInput);
 
-            long startTime = System.currentTimeMillis();
+        System.out.println("\nSanitized output:");
+        System.out.println("  " + result.get());
 
-            Value<String> result = sanitizeAction.execute(
-                complexInput, // inputText
-                "qwen2.5-3b",  // modelName
-                30.0          // timeoutSeconds
-            );
+        assertNotNull(result, "Result should not be null");
+        assertNotNull(result.get(), "Result value should not be null");
 
-            long elapsed = System.currentTimeMillis() - startTime;
-
-            System.out.println("\n✓ Completed in " + elapsed + "ms");
-            System.out.println("\nSanitized output:");
-            System.out.println("  " + result.get());
-
-            assertNotNull(result, "Result should not be null");
-            assertNotNull(result.get(), "Result value should not be null");
-
-            // Result should not contain unescaped newlines or quotes
-            assertFalse(result.get().contains("\n"), "Should not contain unescaped newlines");
-
-        } catch (Exception e) {
-            System.out.println("\n✗ Test failed: " + e.getMessage());
-            fail("Real-world JSON test should not fail: " + e.getMessage());
-        }
+        // Rule-based sanitization must escape newlines
+        assertFalse(result.get().contains("\n"), "Should not contain unescaped newlines");
     }
 
     /**
@@ -362,11 +340,7 @@ public class TestSanitizeJSON {
 
             long startTime = System.currentTimeMillis();
 
-            Value<String> result = sanitizeAction.execute(
-                unicodeText,  // inputText
-                "qwen2.5-3b",  // modelName
-                30.0          // timeoutSeconds
-            );
+            Value<String> result = sanitizeAction.execute(unicodeText);
 
             long elapsed = System.currentTimeMillis() - startTime;
 
@@ -433,11 +407,7 @@ public class TestSanitizeJSON {
         try {
             long startTime = System.currentTimeMillis();
 
-            Value<String> result = sanitizeAction.execute(
-                input,
-                "qwen2.5-3b",
-                45.0  // Custom timeout
-            );
+            Value<String> result = sanitizeAction.execute(input);
 
             long elapsed = System.currentTimeMillis() - startTime;
 

@@ -1,6 +1,7 @@
 package com.automationanywhere.botcommand;
 
-import com.automationanywhere.botcommand.data.Value;
+import com.automationanywhere.botcommand.data.impl.DictionaryValue;
+import com.automationanywhere.botcommand.data.impl.StringValue;
 import com.automationanywhere.botcommand.utils.LlamaInference;
 import com.automationanywhere.botcommand.utils.ModelManager;
 import org.testng.annotations.AfterClass;
@@ -61,14 +62,14 @@ public class TestDeepSeekR1Inference {
 
         long startTime = System.currentTimeMillis();
 
-        Value<String> result = promptAction.execute(prompt, MODEL, TIMEOUT, 0.3);
+        DictionaryValue result = promptAction.execute(prompt, MODEL, TIMEOUT, 0.3);
 
         long elapsed = System.currentTimeMillis() - startTime;
         System.out.println("Completed in " + elapsed + "ms");
-        System.out.println("Response: " + result.get());
+        System.out.println("Response: " + ((StringValue) result.get("response")).get());
 
         assertNotNull(result, "Result should not be null");
-        assertNotNull(result.get(), "Result value should not be null");
+        assertNotNull(((StringValue) result.get("response")).get(), "Result value should not be null");
 
         // The model loaded, processed the prompt, and returned a result
         System.out.println("OK: DeepSeek R1 model loads and produces output");
@@ -85,15 +86,16 @@ public class TestDeepSeekR1Inference {
         String prompt = "Q: What is 2 + 2? A:";
         System.out.println("Prompt: " + prompt);
 
-        Value<String> result = promptAction.execute(prompt, MODEL, TIMEOUT, 0.1);
+        DictionaryValue result = promptAction.execute(prompt, MODEL, TIMEOUT, 0.1);
 
-        System.out.println("Response: [" + result.get() + "]");
+        String response = ((StringValue) result.get("response")).get();
+        System.out.println("Response: [" + response + "]");
 
         assertNotNull(result);
         // Verify no raw thinking tags leak through to the user
-        assertFalse(result.get().contains("<think>"),
+        assertFalse(response.contains("<think>"),
             "Opening <think> tags should be stripped from output");
-        assertFalse(result.get().contains("</think>"),
+        assertFalse(response.contains("</think>"),
             "Closing </think> tags should be stripped from output");
 
         System.out.println("OK: No thinking tags in output");
@@ -112,11 +114,11 @@ public class TestDeepSeekR1Inference {
 
         long startTime = System.currentTimeMillis();
 
-        Value<String> result = promptAction.execute(prompt, MODEL, TIMEOUT, 0.3);
+        DictionaryValue result = promptAction.execute(prompt, MODEL, TIMEOUT, 0.3);
 
         long elapsed = System.currentTimeMillis() - startTime;
         System.out.println("Completed in " + elapsed + "ms");
-        System.out.println("Response: " + result.get());
+        System.out.println("Response: " + ((StringValue) result.get("response")).get());
 
         assertNotNull(result);
 
@@ -135,15 +137,16 @@ public class TestDeepSeekR1Inference {
         System.out.println("Input: " + text);
         System.out.println("Categories: invoice, receipt, contract, report");
 
-        Value<String> result = classifyAction.execute(
+        DictionaryValue result = classifyAction.execute(
             text, "invoice, receipt, contract, report", MODEL, false, false, TIMEOUT
         );
 
-        System.out.println("Classification: " + result.get());
+        String category = ((StringValue) result.get("category")).get();
+        System.out.println("Classification: " + category);
 
         assertNotNull(result, "Classification result should not be null");
-        assertNotNull(result.get(), "Classification value should not be null");
-        assertFalse(result.get().contains("<think>"),
+        assertNotNull(category, "Classification value should not be null");
+        assertFalse(category.contains("<think>"),
             "Thinking blocks should be stripped from classification");
 
         System.out.println("OK: DeepSeek R1 classification integration works");
@@ -167,13 +170,14 @@ public class TestDeepSeekR1Inference {
             System.out.println("Inference " + (i + 1) + ": " + prompts[i]);
 
             long startTime = System.currentTimeMillis();
-            Value<String> result = promptAction.execute(prompts[i], MODEL, TIMEOUT, 0.3);
+            DictionaryValue result = promptAction.execute(prompts[i], MODEL, TIMEOUT, 0.3);
             long elapsed = System.currentTimeMillis() - startTime;
 
-            System.out.println("  Response (" + elapsed + "ms): " + result.get());
+            String response = ((StringValue) result.get("response")).get();
+            System.out.println("  Response (" + elapsed + "ms): " + response);
 
             assertNotNull(result, "Result " + (i + 1) + " should not be null");
-            assertNotNull(result.get(), "Result value " + (i + 1) + " should not be null");
+            assertNotNull(response, "Result value " + (i + 1) + " should not be null");
         }
 
         System.out.println("OK: Multiple sequential inferences completed successfully");

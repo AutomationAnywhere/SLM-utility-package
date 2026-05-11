@@ -1,8 +1,11 @@
 package com.automationanywhere.botcommand;
 
 import com.automationanywhere.botcommand.data.Value;
+import com.automationanywhere.botcommand.data.impl.DictionaryValue;
 import com.automationanywhere.botcommand.data.impl.StringValue;
 import com.automationanywhere.botcommand.exception.BotCommandException;
+import com.automationanywhere.botcommand.utils.ActionUtils;
+import com.automationanywhere.botcommand.utils.DictionaryHelper;
 import com.automationanywhere.botcommand.utils.ModelManager;
 import com.automationanywhere.botcommand.utils.LlamaInference;
 import com.automationanywhere.commandsdk.annotations.*;
@@ -14,22 +17,28 @@ import com.automationanywhere.commandsdk.model.DataType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import static com.automationanywhere.commandsdk.model.DataType.STRING;
+import java.util.LinkedHashMap;
+
+import static com.automationanywhere.commandsdk.model.DataType.DICTIONARY;
 
 /**
  * ClassifyText Action
  *
- * Categorizes text into predefined categories using Small Language Models.
+ * Categorizes text into predefined categories using on-device Small Language Models.
  * Perfect for:
  * - Email triage: "urgent", "normal", "spam"
  * - Document routing: "invoice", "receipt", "contract"
  * - Sentiment analysis: "positive", "negative", "neutral"
  * - Priority classification: "high", "medium", "low"
  *
- * Returns classification result as a string in format:
- * - Simple: "urgent"
- * - With confidence: "urgent|0.95"
- * - With explanation: "urgent|0.95|Contains URGENT keyword and mentions production issue"
+ * Returns a Dictionary with keys:
+ * - category: the matched category name
+ * - confidence: score 0.0-1.0 (if Include Confidence is enabled)
+ * - explanation: brief reason (if Include Explanation is enabled)
+ * - status: "success" or "error"
+ * - message: timing and model info
+ *
+ * Data never leaves your device. No API keys. No cloud calls.
  *
  * First execution downloads model (~600MB-5GB) and may take 10-30 seconds for loading.
  * Subsequent calls are faster (<5 seconds) as models stay in memory.
@@ -48,26 +57,22 @@ import static com.automationanywhere.commandsdk.model.DataType.STRING;
         AllowedTarget.WINDOWS,
         AllowedTarget.MAC_OS
     },
-    return_type = STRING,
+    return_type = DICTIONARY,
     return_required = true
 )
 public class ClassifyText {
 
     private static final Logger logger = LogManager.getLogger(ClassifyText.class);
 
-    /**
-     * Execute text classification using a Small Language Model
-     *
-     * @param inputText The text to classify
-     * @param categories Comma-separated list of categories (e.g., "urgent, normal, low_priority")
-     * @param modelName The model to use (qwen2.5-3b, llama3.2-3b, phi3.5-mini, gemma-2b)
-     * @param includeConfidence Whether to include confidence score in output
-     * @param includeExplanation Whether to include explanation of why this category was chosen
-     * @param timeoutSeconds Maximum time to wait for processing (default: 30)
-     * @return Classification result as string
-     */
+    // Max tokens needed for: category name + optional confidence score + optional brief explanation.
+    // Capped at the model's own limit via Math.min at call time.
+    static final int MAX_OUTPUT_TOKENS = 150;
+
+    // Low temperature for deterministic, consistent classification results.
+    static final float CLASSIFICATION_TEMPERATURE = 0.1f;
+
     @Execute
-    public Value<String> execute(
+    public DictionaryValue execute(
 
         @Idx(index = "1", type = AttributeType.TEXTAREA)
         @Pkg(label = "Input Text", description = "Text to classify")
@@ -92,11 +97,11 @@ public class ClassifyText {
         String modelName,
 
         @Idx(index = "4", type = AttributeType.CHECKBOX)
-        @Pkg(label = "Include Confidence Score", description = "Include confidence score in output (0.0-1.0)", default_value = "false", default_value_type = DataType.BOOLEAN)
+        @Pkg(label = "Include Confidence Score", description = "Add 'confidence' key to output (0.0-1.0)", default_value = "false", default_value_type = DataType.BOOLEAN)
         Boolean includeConfidence,
 
         @Idx(index = "5", type = AttributeType.CHECKBOX)
-        @Pkg(label = "Include Explanation", description = "Include brief explanation of why this category was chosen", default_value = "false", default_value_type = DataType.BOOLEAN)
+        @Pkg(label = "Include Explanation", description = "Add 'explanation' key to output with brief reasoning", default_value = "false", default_value_type = DataType.BOOLEAN)
         Boolean includeExplanation,
 
         @Idx(index = "6", type = AttributeType.NUMBER)
@@ -110,7 +115,6 @@ public class ClassifyText {
                     modelName, categories, timeoutSeconds);
 
         try {
-            // Validate inputs
             if (inputText == null || inputText.trim().isEmpty()) {
                 throw new BotCommandException("Input text cannot be empty");
             }
@@ -131,94 +135,70 @@ public class ClassifyText {
                 includeExplanation = false;
             }
 
-            // Parse model type
-            ModelManager.ModelType modelType;
-            try {
-                modelType = ModelManager.ModelType.fromId(modelName.toLowerCase().trim());
-            } catch (IllegalArgumentException e) {
-                logger.error("Invalid model name: {}", modelName);
-                throw new BotCommandException("Invalid model name: " + modelName +
-                    ". Valid options: " + ModelManager.ModelType.supportedModelIds());
-            }
+            ModelManager.ModelType modelType = ActionUtils.resolveModelType(modelName);
 
-            logger.debug("Using model: {} for text length: {}", modelType.getId(), inputText.length());
-
-            // Initialize inference engine (will load model if needed)
             long startTime = System.currentTimeMillis();
             LlamaInference inference = new LlamaInference(modelType);
             long loadTime = System.currentTimeMillis() - startTime;
-
             if (loadTime > 1000) {
                 logger.info("Model loaded in {}ms (first-time loading takes longer)", loadTime);
             }
 
-            // Build classification prompt
             String prompt = buildClassificationPrompt(inputText, categories, includeConfidence, includeExplanation);
             logger.debug("Generated prompt: {}", prompt.length() > 200 ? prompt.substring(0, 200) + "..." : prompt);
 
-            // Generate classification
+            int effectiveMaxTokens = Math.min(MAX_OUTPUT_TOKENS, modelType.getMaxOutputTokens());
             String rawResponse = inference.generateText(
                 prompt,
-                150,  // maxTokens - enough for category + confidence + brief explanation
-                0.1f, // Low temperature for consistent classification
+                effectiveMaxTokens,
+                CLASSIFICATION_TEMPERATURE,
                 timeoutSeconds.intValue()
             );
 
-            // Parse and format the response
-            String result = parseClassificationResponse(rawResponse, categories, includeConfidence, includeExplanation);
+            LinkedHashMap<String, Value<?>> resultFields = parseClassificationResponse(
+                rawResponse, categories, includeConfidence, includeExplanation);
 
             long totalTime = System.currentTimeMillis() - startTime;
-            logger.info("Classification completed in {}ms. Result: {}", totalTime, result);
+            String category = ((StringValue) resultFields.get("category")).get();
+            logger.info("Classification completed in {}ms. Result: {}", totalTime, category);
 
-            return new StringValue(result);
+            return DictionaryHelper.success(resultFields, modelType.getId(), totalTime);
 
+        } catch (BotCommandException e) {
+            throw e;
         } catch (Exception e) {
             logger.error("ClassifyText action failed", e);
-
-            // Provide helpful error messages
             String errorMsg;
-            if (e.getMessage().contains("timeout")) {
+            if (e.getMessage() != null && e.getMessage().contains("timeout")) {
                 errorMsg = "Classification timed out after " + timeoutSeconds + " seconds. Try increasing timeout or using a smaller model.";
-            } else if (e.getMessage().contains("model") || e.getMessage().contains("GGUF")) {
+            } else if (e.getMessage() != null && (e.getMessage().contains("model") || e.getMessage().contains("GGUF"))) {
                 errorMsg = "Model loading/inference failed: " + e.getMessage() +
                     ". Ensure sufficient memory (~8GB RAM) and model is downloaded.";
             } else {
-                errorMsg = "Classification failed: " + e.getMessage();
+                errorMsg = "Classification failed: " + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
             }
-
             logger.error("Error details: {}", errorMsg);
             throw new BotCommandException(errorMsg, e);
         }
     }
 
-    /**
-     * Build the classification prompt based on requested output format
-     */
     private String buildClassificationPrompt(String inputText, String categories,
-                                            boolean includeConfidence, boolean includeExplanation) {
+                                             boolean includeConfidence, boolean includeExplanation) {
         StringBuilder prompt = new StringBuilder();
-
         prompt.append("Classify the following text into ONE of these categories: ");
         prompt.append(categories);
-        prompt.append("\n\n");
-
-        prompt.append("Text to classify: ");
+        prompt.append("\n\nText to classify: ");
         prompt.append(inputText);
-        prompt.append("\n\n");
-
-        prompt.append("Respond with ONLY the category");
+        prompt.append("\n\nRespond with ONLY the category");
 
         if (includeConfidence) {
             prompt.append(", followed by a pipe symbol and confidence score (0.0-1.0)");
         }
-
         if (includeExplanation) {
             prompt.append(", followed by a pipe symbol and a brief explanation");
         }
-
         prompt.append(".\n\n");
 
-        // Example format based on options
         if (includeConfidence && includeExplanation) {
             prompt.append("Example format: category|0.95|brief explanation\n");
         } else if (includeConfidence) {
@@ -228,53 +208,67 @@ public class ClassifyText {
         } else {
             prompt.append("Example format: category\n");
         }
-
         prompt.append("Classification:");
-
         return prompt.toString();
     }
 
     /**
-     * Parse the model's classification response and format it
+     * Parse the model's classification response into a Dictionary.
+     * Package-private for unit testing.
+     *
+     * @throws BotCommandException if the response is empty or doesn't match any provided category
      */
-    private String parseClassificationResponse(String rawResponse, String categories,
-                                               boolean includeConfidence, boolean includeExplanation) {
+    LinkedHashMap<String, Value<?>> parseClassificationResponse(String rawResponse, String categories,
+                                                                boolean includeConfidence, boolean includeExplanation) {
         if (rawResponse == null || rawResponse.trim().isEmpty()) {
-            logger.warn("Empty response from model, returning first category as fallback");
-            return categories.split(",")[0].trim();
+            throw new BotCommandException(
+                "Model returned an empty classification response. " +
+                "Try increasing the timeout or using a different model.");
         }
 
         String cleaned = rawResponse.trim();
-
-        // Strip DeepSeek R1 thinking blocks (<think>...</think>)
         cleaned = LlamaInference.stripThinkingBlocks(cleaned);
-
-        // Remove common prefixes the model might add
         cleaned = cleaned.replaceAll("^(Classification:|Category:|Answer:|Result:)\\s*", "");
 
-        // Take only the first line (model might ramble)
         if (cleaned.contains("\n")) {
             cleaned = cleaned.substring(0, cleaned.indexOf("\n")).trim();
         }
+        cleaned = cleaned.replaceAll("[.!?,;:]+$", "").trim();
 
-        // If response contains pipe delimiters, it's already formatted correctly
-        if (cleaned.contains("|")) {
-            return cleaned;
-        }
-
-        // Otherwise, validate the category and return it
         String[] categoryList = categories.split(",");
-        String lowerCleaned = cleaned.toLowerCase();
+        String categoryCandidate = cleaned.contains("|") ? cleaned.split("\\|")[0].trim() : cleaned;
 
-        // Check if response matches any category (case-insensitive)
-        for (String category : categoryList) {
-            if (lowerCleaned.contains(category.trim().toLowerCase())) {
-                return category.trim();
+        String matchedCategory = null;
+        for (String cat : categoryList) {
+            if (categoryCandidate.equalsIgnoreCase(cat.trim())) {
+                matchedCategory = cat.trim();
+                break;
             }
         }
 
-        // If no match found, return the cleaned response anyway (might be a variation)
-        logger.warn("Response '{}' doesn't exactly match provided categories, returning as-is", cleaned);
-        return cleaned;
+        if (matchedCategory == null) {
+            throw new BotCommandException(
+                "Model returned '" + categoryCandidate + "' which does not match any expected category. " +
+                "Expected one of: " + categories.trim() + ". " +
+                "Consider rephrasing the categories or using a more capable model.");
+        }
+
+        LinkedHashMap<String, Value<?>> result = new LinkedHashMap<>();
+        result.put("category", new StringValue(matchedCategory));
+
+        if (cleaned.contains("|")) {
+            String[] parts = cleaned.split("\\|");
+            if (includeConfidence && parts.length > 1) {
+                result.put("confidence", new StringValue(parts[1].trim()));
+            }
+            if (includeExplanation) {
+                int explanationIdx = includeConfidence ? 2 : 1;
+                if (parts.length > explanationIdx) {
+                    result.put("explanation", new StringValue(parts[explanationIdx].trim()));
+                }
+            }
+        }
+
+        return result;
     }
 }

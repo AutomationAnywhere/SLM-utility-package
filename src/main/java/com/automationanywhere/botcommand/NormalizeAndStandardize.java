@@ -1,8 +1,11 @@
 package com.automationanywhere.botcommand;
 
 import com.automationanywhere.botcommand.data.Value;
+import com.automationanywhere.botcommand.data.impl.DictionaryValue;
 import com.automationanywhere.botcommand.data.impl.StringValue;
 import com.automationanywhere.botcommand.exception.BotCommandException;
+import com.automationanywhere.botcommand.utils.ActionUtils;
+import com.automationanywhere.botcommand.utils.DictionaryHelper;
 import com.automationanywhere.botcommand.utils.ModelManager;
 import com.automationanywhere.botcommand.utils.LlamaInference;
 import com.automationanywhere.commandsdk.annotations.*;
@@ -14,7 +17,9 @@ import com.automationanywhere.commandsdk.model.DataType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import static com.automationanywhere.commandsdk.model.DataType.STRING;
+import java.util.LinkedHashMap;
+
+import static com.automationanywhere.commandsdk.model.DataType.DICTIONARY;
 
 /**
  * NormalizeAndStandardize Action
@@ -27,7 +32,14 @@ import static com.automationanywhere.commandsdk.model.DataType.STRING;
  * - Names: "SMITH, JOHN Q." → "John Q. Smith"
  * - Custom formats: Any text normalization task
  *
- * The model intelligently handles edge cases and variations that simple rules miss.
+ * Returns a Dictionary with keys:
+ * - result: the normalized/standardized text
+ * - original: the original input text
+ * - data_type: the data type used for normalization
+ * - status: "success" or "error"
+ * - message: timing and model info
+ *
+ * Data never leaves your device. No API keys. No cloud calls.
  *
  * First execution downloads model (~600MB-5GB) and may take 10-30 seconds for loading.
  * Subsequent calls are faster (<5 seconds) as models stay in memory.
@@ -46,12 +58,20 @@ import static com.automationanywhere.commandsdk.model.DataType.STRING;
         AllowedTarget.WINDOWS,
         AllowedTarget.MAC_OS
     },
-    return_type = STRING,
+    return_type = DICTIONARY,
     return_required = true
 )
 public class NormalizeAndStandardize {
 
     private static final Logger logger = LogManager.getLogger(NormalizeAndStandardize.class);
+
+    // Max tokens for normalized output. Set above the typical single-field result (phone/date/name)
+    // to allow room for longer types like addresses or custom formats without truncating.
+    // Capped at the model's own limit via Math.min at call time.
+    static final int MAX_OUTPUT_TOKENS = 200;
+
+    // Low temperature for consistent, deterministic formatting output.
+    static final float NORMALIZE_TEMPERATURE = 0.1f;
 
     /**
      * Execute text normalization and standardization using a Small Language Model
@@ -65,7 +85,7 @@ public class NormalizeAndStandardize {
      * @return Normalized/standardized text
      */
     @Execute
-    public Value<String> execute(
+    public DictionaryValue execute(
 
         @Idx(index = "1", type = AttributeType.TEXTAREA)
         @Pkg(label = "Input Text", description = "Text to normalize/standardize")
@@ -115,6 +135,10 @@ public class NormalizeAndStandardize {
         logger.info("NormalizeAndStandardize action started - Model: {}, DataType: {}, Format: {}, Timeout: {}s",
                     modelName, dataType, outputFormat, timeoutSeconds);
 
+        // Declared outside try so they're accessible in the preserveOriginalOnFailure catch path
+        ModelManager.ModelType modelType = null;
+        long startTime = System.currentTimeMillis();
+
         try {
             // Validate inputs
             if (inputText == null || inputText.trim().isEmpty()) {
@@ -133,20 +157,12 @@ public class NormalizeAndStandardize {
                 preserveOriginalOnFailure = true;
             }
 
-            // Parse model type
-            ModelManager.ModelType modelType;
-            try {
-                modelType = ModelManager.ModelType.fromId(modelName.toLowerCase().trim());
-            } catch (IllegalArgumentException e) {
-                logger.error("Invalid model name: {}", modelName);
-                throw new BotCommandException("Invalid model name: " + modelName +
-                    ". Valid options: " + ModelManager.ModelType.supportedModelIds());
-            }
+            modelType = ActionUtils.resolveModelType(modelName);
 
             logger.debug("Using model: {} for text length: {}", modelType.getId(), inputText.length());
 
             // Initialize inference engine (will load model if needed)
-            long startTime = System.currentTimeMillis();
+            startTime = System.currentTimeMillis();
             LlamaInference inference = new LlamaInference(modelType);
             long loadTime = System.currentTimeMillis() - startTime;
 
@@ -158,11 +174,12 @@ public class NormalizeAndStandardize {
             String prompt = buildNormalizationPrompt(inputText, dataType, outputFormat);
             logger.debug("Generated prompt: {}", prompt.length() > 200 ? prompt.substring(0, 200) + "..." : prompt);
 
-            // Generate normalized text
+            // Generate normalized text — cap to the model's own max output token limit
+            int effectiveMaxTokens = Math.min(MAX_OUTPUT_TOKENS, modelType.getMaxOutputTokens());
             String rawResponse = inference.generateText(
                 prompt,
-                100,  // maxTokens - normalized output should be concise
-                0.1f, // Low temperature for consistent formatting
+                effectiveMaxTokens,
+                NORMALIZE_TEMPERATURE,
                 timeoutSeconds.intValue()
             );
 
@@ -173,7 +190,11 @@ public class NormalizeAndStandardize {
             logger.info("Normalization completed in {}ms. Input: '{}' → Output: '{}'",
                        totalTime, inputText, result);
 
-            return new StringValue(result);
+            LinkedHashMap<String, Value<?>> fields = new LinkedHashMap<>();
+            fields.put("result", new StringValue(result));
+            fields.put("original", new StringValue(inputText));
+            fields.put("data_type", new StringValue(dataType));
+            return DictionaryHelper.success(fields, modelType.getId(), totalTime);
 
         } catch (Exception e) {
             logger.error("NormalizeAndStandardize action failed", e);
@@ -181,7 +202,12 @@ public class NormalizeAndStandardize {
             // If preserve original is enabled, return original text
             if (preserveOriginalOnFailure != null && preserveOriginalOnFailure) {
                 logger.warn("Returning original text due to failure: {}", e.getMessage());
-                return new StringValue(inputText);
+                LinkedHashMap<String, Value<?>> fields = new LinkedHashMap<>();
+                fields.put("result", new StringValue(inputText));
+                fields.put("original", new StringValue(inputText));
+                fields.put("data_type", new StringValue(dataType != null ? dataType : "unknown"));
+                String resolvedModel = modelType != null ? modelType.getId() : modelName;
+                return DictionaryHelper.success(fields, resolvedModel, System.currentTimeMillis() - startTime);
             }
 
             // Provide helpful error messages
@@ -299,9 +325,10 @@ public class NormalizeAndStandardize {
     }
 
     /**
-     * Parse the model's normalization response
+     * Parse the model's normalization response.
+     * Package-private for unit testing.
      */
-    private String parseNormalizationResponse(String rawResponse, String originalText, boolean preserveOriginal) {
+    String parseNormalizationResponse(String rawResponse, String originalText, boolean preserveOriginal) {
         if (rawResponse == null || rawResponse.trim().isEmpty()) {
             logger.warn("Empty response from model");
             return preserveOriginal ? originalText : "";
@@ -318,17 +345,9 @@ public class NormalizeAndStandardize {
         // Take only the first line (model might add extra commentary)
         if (cleaned.contains("\n")) {
             String firstLine = cleaned.substring(0, cleaned.indexOf("\n")).trim();
-            // Only use first line if it's not empty
             if (!firstLine.isEmpty()) {
                 cleaned = firstLine;
             }
-        }
-
-        // Basic validation: if result is suspiciously long, return original
-        if (cleaned.length() > originalText.length() * 2) {
-            logger.warn("Normalized output suspiciously long ({} chars vs {} original), returning original",
-                       cleaned.length(), originalText.length());
-            return preserveOriginal ? originalText : cleaned;
         }
 
         return cleaned;

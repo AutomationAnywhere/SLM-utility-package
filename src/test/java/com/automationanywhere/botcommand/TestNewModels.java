@@ -1,6 +1,7 @@
 package com.automationanywhere.botcommand;
 
-import com.automationanywhere.botcommand.data.Value;
+import com.automationanywhere.botcommand.data.impl.DictionaryValue;
+import com.automationanywhere.botcommand.data.impl.StringValue;
 import com.automationanywhere.botcommand.utils.LlamaInference;
 import com.automationanywhere.botcommand.utils.ModelManager;
 import org.testng.annotations.AfterClass;
@@ -283,16 +284,16 @@ public class TestNewModels {
 
         long startTime = System.currentTimeMillis();
 
-        Value<String> result = promptAction.execute(prompt, "gemma4-e2b", 120.0, 0.3);
+        DictionaryValue result = promptAction.execute(prompt, "gemma4-e2b", 120.0, 0.3);
 
         long elapsed = System.currentTimeMillis() - startTime;
 
         System.out.println("\nCompleted in " + elapsed + "ms");
-        System.out.println("Response: " + result.get());
+        System.out.println("Response: " + ((StringValue) result.get("response")).get());
 
         assertNotNull(result);
-        assertNotNull(result.get());
-        assertFalse(result.get().isEmpty());
+        assertNotNull(((StringValue) result.get("response")).get());
+        assertFalse(((StringValue) result.get("response")).get().isEmpty());
         System.out.println("\nOK: Gemma 4 E2B inference successful");
     }
 
@@ -311,16 +312,16 @@ public class TestNewModels {
 
         long startTime = System.currentTimeMillis();
 
-        Value<String> result = promptAction.execute(prompt, "deepseek-r1-1.5b", 120.0, 0.3);
+        DictionaryValue result = promptAction.execute(prompt, "deepseek-r1-1.5b", 120.0, 0.3);
 
         long elapsed = System.currentTimeMillis() - startTime;
 
         System.out.println("\nCompleted in " + elapsed + "ms");
-        System.out.println("Response: " + result.get());
+        System.out.println("Response: " + ((StringValue) result.get("response")).get());
 
         assertNotNull(result);
-        assertNotNull(result.get());
-        assertFalse(result.get().isEmpty());
+        assertNotNull(((StringValue) result.get("response")).get());
+        assertFalse(((StringValue) result.get("response")).get().isEmpty());
         System.out.println("\nOK: DeepSeek R1 1.5B inference successful");
     }
 }

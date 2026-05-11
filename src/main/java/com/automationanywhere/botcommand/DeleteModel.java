@@ -15,6 +15,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.stream.Stream;
 
 import static com.automationanywhere.commandsdk.model.DataType.BOOLEAN;
 
@@ -135,12 +136,13 @@ public class DeleteModel {
             // Try to delete the directory (will only succeed if empty)
             try {
                 if (Files.exists(modelDir) && Files.isDirectory(modelDir)) {
-                    // Check if directory is empty
-                    if (Files.list(modelDir).findAny().isEmpty()) {
-                        Files.delete(modelDir);
-                        logger.info("Model directory deleted: {}", modelDir);
-                    } else {
-                        logger.debug("Model directory not empty, keeping: {}", modelDir);
+                    try (Stream<Path> dirStream = Files.list(modelDir)) {
+                        if (dirStream.findAny().isEmpty()) {
+                            Files.delete(modelDir);
+                            logger.info("Model directory deleted: {}", modelDir);
+                        } else {
+                            logger.debug("Model directory not empty, keeping: {}", modelDir);
+                        }
                     }
                 }
             } catch (Exception e) {

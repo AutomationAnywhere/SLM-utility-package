@@ -1,8 +1,11 @@
 package com.automationanywhere.botcommand;
 
 import com.automationanywhere.botcommand.data.Value;
+import com.automationanywhere.botcommand.data.impl.DictionaryValue;
 import com.automationanywhere.botcommand.data.impl.StringValue;
 import com.automationanywhere.botcommand.exception.BotCommandException;
+import com.automationanywhere.botcommand.utils.ActionUtils;
+import com.automationanywhere.botcommand.utils.DictionaryHelper;
 import com.automationanywhere.botcommand.utils.ModelManager;
 import com.automationanywhere.botcommand.utils.LlamaInference;
 import com.automationanywhere.commandsdk.annotations.*;
@@ -14,12 +17,25 @@ import com.automationanywhere.commandsdk.model.DataType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import static com.automationanywhere.commandsdk.model.DataType.STRING;
+import java.util.LinkedHashMap;
+
+import static com.automationanywhere.commandsdk.model.DataType.DICTIONARY;
 
 /**
  * Prompt Action
  *
  * Send a custom prompt to a Small Language Model and receive generated text.
+ * This is the free-form action — use it for any task the specialized actions don't cover.
+ * For structured tasks, prefer ExtractData, ClassifyText, SummarizeText, NormalizeAndStandardize, etc.
+ *
+ * Returns a Dictionary with keys:
+ * - response: the generated text
+ * - model: the model ID used
+ * - status: "success" or "error"
+ * - message: timing info
+ *
+ * Data never leaves your device. No API keys. No cloud calls.
+ *
  * This is a general-purpose action for any text generation task:
  * - Question answering
  * - Text summarization
@@ -53,13 +69,17 @@ import static com.automationanywhere.commandsdk.model.DataType.STRING;
             AllowedTarget.MAC_OS
 //                AllowedTarget.ONDEMAND_CLOUD
     },
-    return_type = STRING,
+    return_type = DICTIONARY,
     return_required = true,
     comment = true
 )
 public class Prompt {
 
     private static final Logger logger = LogManager.getLogger(Prompt.class);
+
+    // Default temperature for general-purpose generation: balanced between focused (0.0) and
+    // creative (1.0). Users can override this via the Temperature parameter.
+    static final float DEFAULT_TEMPERATURE = 0.3f;
 
     /**
      * Execute prompt generation with a Small Language Model
@@ -71,7 +91,7 @@ public class Prompt {
      * @return Generated text response from the model
      */
     @Execute
-    public Value<String> execute(
+    public DictionaryValue execute(
 
         @Idx(index = "1", type = AttributeType.TEXTAREA)
         @Pkg(label = "Prompt", description = "The prompt or instruction to send to the model")
@@ -117,7 +137,7 @@ public class Prompt {
 
             // Validate and clamp temperature
             if (temperature == null) {
-                temperature = 0.3;
+                temperature = (double) DEFAULT_TEMPERATURE;
             }
             if (temperature < 0.0) {
                 logger.warn("Temperature {} is below minimum 0.0, clamping to 0.0", temperature);
@@ -128,15 +148,7 @@ public class Prompt {
                 temperature = 1.0;
             }
 
-            // Parse model type
-            ModelManager.ModelType modelType;
-            try {
-                modelType = ModelManager.ModelType.fromId(modelName.toLowerCase().trim());
-            } catch (IllegalArgumentException e) {
-                logger.error("Invalid model name: {}", modelName);
-                throw new BotCommandException("Invalid model name: " + modelName +
-                    ". Valid options: " + ModelManager.ModelType.supportedModelIds());
-            }
+            ModelManager.ModelType modelType = ActionUtils.resolveModelType(modelName);
 
             logger.debug("Using model: {} for prompt: {}",
                 modelType.getId(),
@@ -170,7 +182,9 @@ public class Prompt {
             logger.info("Generation completed in {}ms. Response length: {} chars",
                 totalTime, cleaned.length());
 
-            return new StringValue(cleaned);
+            LinkedHashMap<String, Value<?>> fields = new LinkedHashMap<>();
+            fields.put("response", new StringValue(cleaned));
+            return DictionaryHelper.success(fields, modelType.getId(), totalTime);
 
         } catch (Exception e) {
             logger.error("Prompt action failed", e);

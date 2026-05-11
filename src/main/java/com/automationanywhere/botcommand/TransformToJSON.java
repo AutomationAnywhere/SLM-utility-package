@@ -1,8 +1,11 @@
 package com.automationanywhere.botcommand;
 
 import com.automationanywhere.botcommand.data.Value;
+import com.automationanywhere.botcommand.data.impl.DictionaryValue;
 import com.automationanywhere.botcommand.data.impl.StringValue;
 import com.automationanywhere.botcommand.exception.BotCommandException;
+import com.automationanywhere.botcommand.utils.ActionUtils;
+import com.automationanywhere.botcommand.utils.DictionaryHelper;
 import com.automationanywhere.botcommand.utils.ModelManager;
 import com.automationanywhere.botcommand.utils.LlamaInference;
 import com.automationanywhere.commandsdk.annotations.*;
@@ -16,7 +19,7 @@ import org.apache.logging.log4j.Logger;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 
-import static com.automationanywhere.commandsdk.model.DataType.STRING;
+import static com.automationanywhere.commandsdk.model.DataType.DICTIONARY;
 
 /**
  * TransformToJSON Action
@@ -28,8 +31,10 @@ import static com.automationanywhere.commandsdk.model.DataType.STRING;
  * - Table data → JSON for database operations
  * - Unstructured text → structured JSON
  *
- * Returns a valid JSON string (either object {} or array [])
- * Output is validated to ensure JSON syntax correctness.
+ * Returns a Dictionary with keys:
+ * - json: a valid JSON string (either object {} or array [])
+ * - status: "success" or "error"
+ * - message: timing and model info
  *
  * First execution downloads model (~600MB-5GB) and may take 10-30 seconds for loading.
  * Subsequent calls are faster (<5 seconds) as models stay in memory.
@@ -48,13 +53,20 @@ import static com.automationanywhere.commandsdk.model.DataType.STRING;
         AllowedTarget.WINDOWS,
         AllowedTarget.MAC_OS
     },
-    return_type = STRING,
+    return_type = DICTIONARY,
     return_required = true
 )
 public class TransformToJSON {
 
     private static final Logger logger = LogManager.getLogger(TransformToJSON.class);
     private static final Gson gson = new Gson();
+
+    // Max tokens for JSON output — JSON can be verbose, especially for multi-row arrays.
+    // Capped at the model's own limit via Math.min at call time.
+    static final int MAX_OUTPUT_TOKENS = 300;
+
+    // Low temperature for consistent, structured JSON output.
+    static final float JSON_TEMPERATURE = 0.2f;
 
     /**
      * Execute text to JSON transformation using a Small Language Model
@@ -68,7 +80,7 @@ public class TransformToJSON {
      * @return Valid JSON string
      */
     @Execute
-    public Value<String> execute(
+    public DictionaryValue execute(
 
         @Idx(index = "1", type = AttributeType.TEXTAREA)
         @Pkg(label = "Input Text", description = "Text to transform into JSON")
@@ -147,15 +159,7 @@ public class TransformToJSON {
                 timeoutSeconds = 30.0;
             }
 
-            // Parse model type
-            ModelManager.ModelType modelType;
-            try {
-                modelType = ModelManager.ModelType.fromId(modelName.toLowerCase().trim());
-            } catch (IllegalArgumentException e) {
-                logger.error("Invalid model name: {}", modelName);
-                throw new BotCommandException("Invalid model name: " + modelName +
-                    ". Valid options: " + ModelManager.ModelType.supportedModelIds());
-            }
+            ModelManager.ModelType modelType = ActionUtils.resolveModelType(modelName);
 
             logger.debug("Using model: {} for text length: {}", modelType.getId(), inputText.length());
 
@@ -172,11 +176,12 @@ public class TransformToJSON {
             String prompt = buildTransformationPrompt(inputText, inputFormat, outputType);
             logger.debug("Generated prompt: {}", prompt.length() > 200 ? prompt.substring(0, 200) + "..." : prompt);
 
-            // Generate JSON
+            // Generate JSON — cap to the model's own max output token limit
+            int effectiveMaxTokens = Math.min(MAX_OUTPUT_TOKENS, modelType.getMaxOutputTokens());
             String rawResponse = inference.generateText(
                 prompt,
-                300,  // maxTokens - JSON can be verbose
-                0.2f, // Low temperature for consistent structure
+                effectiveMaxTokens,
+                JSON_TEMPERATURE,
                 timeoutSeconds.intValue()
             );
 
@@ -186,7 +191,7 @@ public class TransformToJSON {
             long totalTime = System.currentTimeMillis() - startTime;
             logger.info("Transformation completed in {}ms. Output length: {} chars", totalTime, jsonResult.length());
 
-            return new StringValue(jsonResult);
+            return DictionaryHelper.success("json", jsonResult, modelType.getId(), totalTime);
 
         } catch (Exception e) {
             logger.error("TransformToJSON action failed", e);
@@ -279,9 +284,13 @@ public class TransformToJSON {
     }
 
     /**
-     * Parse, validate, and format the JSON response
+     * Parse, validate, and format the JSON response.
+     * Package-private for unit testing.
+     *
+     * @throws BotCommandException if the response is empty, contains no JSON, or the JSON structure
+     *         does not match the requested outputType
      */
-    private String parseAndValidateJSON(String rawResponse, String outputStyle, String outputType) throws BotCommandException {
+    String parseAndValidateJSON(String rawResponse, String outputStyle, String outputType) throws BotCommandException {
         if (rawResponse == null || rawResponse.trim().isEmpty()) {
             throw new BotCommandException("Model returned empty response");
         }
@@ -349,16 +358,13 @@ public class TransformToJSON {
             boolean isObject = parsed instanceof java.util.Map;
 
             if (outputType.equals("array") && !isArray) {
-                logger.warn("Requested array but got object, wrapping in array");
-                cleaned = "[" + cleaned + "]";
+                throw new BotCommandException(
+                    "Model generated a JSON object but an array was requested. " +
+                    "Change the Output Type to 'Object', or adjust the input so it contains multiple rows.");
             } else if (outputType.equals("object") && !isObject) {
-                logger.warn("Requested object but got array, using first element");
-                java.util.List<?> list = (java.util.List<?>) parsed;
-                if (!list.isEmpty()) {
-                    cleaned = gson.toJson(list.get(0));
-                } else {
-                    cleaned = "{}";
-                }
+                throw new BotCommandException(
+                    "Model generated a JSON array but an object was requested. " +
+                    "Change the Output Type to 'Array', or adjust the input so it contains a single record.");
             }
 
             // Re-parse to apply formatting

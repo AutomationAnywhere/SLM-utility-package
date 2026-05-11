@@ -1,6 +1,7 @@
 package com.automationanywhere.botcommand;
 
-import com.automationanywhere.botcommand.data.Value;
+import com.automationanywhere.botcommand.data.impl.DictionaryValue;
+import com.automationanywhere.botcommand.data.impl.StringValue;
 import com.automationanywhere.botcommand.utils.ModelManager;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
@@ -111,7 +112,7 @@ public class TestNormalizeAndStandardize {
 
             long startTime = System.currentTimeMillis();
 
-            Value<String> result = normalizeAction.execute(
+            DictionaryValue result = normalizeAction.execute(
                 input,
                 "phone",
                 format,
@@ -122,10 +123,10 @@ public class TestNormalizeAndStandardize {
 
             long elapsed = System.currentTimeMillis() - startTime;
             System.out.println("\n✓ Completed in " + elapsed + "ms");
-            System.out.println("Output: " + result.get());
+            System.out.println("Output: " + ((StringValue) result.get("result")).get());
 
             assertNotNull(result);
-            assertFalse(result.get().isEmpty());
+            assertFalse(((StringValue) result.get("result")).get().isEmpty());
 
         } catch (Exception e) {
             System.out.println("\n✗ Test failed: " + e.getMessage());
@@ -147,7 +148,7 @@ public class TestNormalizeAndStandardize {
             System.out.println("Input: " + input);
             System.out.println("Expected format: " + format);
 
-            Value<String> result = normalizeAction.execute(
+            DictionaryValue result = normalizeAction.execute(
                 input,
                 "date",
                 format,
@@ -156,10 +157,10 @@ public class TestNormalizeAndStandardize {
                 45.0
             );
 
-            System.out.println("Output: " + result.get());
+            System.out.println("Output: " + ((StringValue) result.get("result")).get());
 
             assertNotNull(result);
-            assertFalse(result.get().isEmpty());
+            assertFalse(((StringValue) result.get("result")).get().isEmpty());
 
         } catch (Exception e) {
             System.out.println("\n✗ Test failed: " + e.getMessage());
@@ -181,7 +182,7 @@ public class TestNormalizeAndStandardize {
             System.out.println("Input: " + input);
             System.out.println("Format: " + format);
 
-            Value<String> result = normalizeAction.execute(
+            DictionaryValue result = normalizeAction.execute(
                 input,
                 "name",
                 format,
@@ -190,10 +191,10 @@ public class TestNormalizeAndStandardize {
                 45.0
             );
 
-            System.out.println("Output: " + result.get());
+            System.out.println("Output: " + ((StringValue) result.get("result")).get());
 
             assertNotNull(result);
-            assertFalse(result.get().isEmpty());
+            assertFalse(((StringValue) result.get("result")).get().isEmpty());
 
         } catch (Exception e) {
             System.out.println("\n✗ Test failed: " + e.getMessage());

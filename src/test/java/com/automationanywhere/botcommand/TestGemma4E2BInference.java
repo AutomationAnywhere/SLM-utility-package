@@ -1,6 +1,7 @@
 package com.automationanywhere.botcommand;
 
-import com.automationanywhere.botcommand.data.Value;
+import com.automationanywhere.botcommand.data.impl.DictionaryValue;
+import com.automationanywhere.botcommand.data.impl.StringValue;
 import com.automationanywhere.botcommand.utils.ModelManager;
 import com.automationanywhere.botcommand.utils.ModelDownloader;
 import com.google.gson.Gson;
@@ -156,12 +157,12 @@ public class TestGemma4E2BInference {
         System.out.println("\n[TEST] Gemma 4 E2B - Question Answering");
 
         String prompt = "Q: What is the capital of France? A:";
-        Value<String> result = promptAction.execute(prompt, MODEL, 120.0, 0.3);
+        DictionaryValue result = promptAction.execute(prompt, MODEL, 120.0, 0.3);
 
         assertNotNull(result);
-        assertNotNull(result.get());
-        assertFalse(result.get().isEmpty());
-        System.out.println("Response: " + result.get());
+        assertNotNull(((StringValue) result.get("response")).get());
+        assertFalse(((StringValue) result.get("response")).get().isEmpty());
+        System.out.println("Response: " + ((StringValue) result.get("response")).get());
         System.out.println("OK: Gemma 4 E2B question answering works");
     }
 
@@ -169,12 +170,12 @@ public class TestGemma4E2BInference {
     public void testMathReasoning() {
         System.out.println("\n[TEST] Gemma 4 E2B - Math Reasoning");
 
-        Value<String> result = promptAction.execute("Q: What is 15 + 27? A:", MODEL, 120.0, 0.1);
+        DictionaryValue result = promptAction.execute("Q: What is 15 + 27? A:", MODEL, 120.0, 0.1);
 
         assertNotNull(result);
-        assertFalse(result.get().isEmpty());
-        assertTrue(result.get().contains("42"), "Should contain correct answer 42");
-        System.out.println("Response: " + result.get());
+        assertFalse(((StringValue) result.get("response")).get().isEmpty());
+        assertTrue(((StringValue) result.get("response")).get().contains("42"), "Should contain correct answer 42");
+        System.out.println("Response: " + ((StringValue) result.get("response")).get());
         System.out.println("OK");
     }
 
@@ -182,14 +183,14 @@ public class TestGemma4E2BInference {
     public void testSentimentClassification() {
         System.out.println("\n[TEST] Gemma 4 E2B - Sentiment Classification");
 
-        Value<String> result = classifyAction.execute(
+        DictionaryValue result = classifyAction.execute(
             "This product exceeded all my expectations. Absolutely fantastic quality!",
             "positive, negative, neutral", MODEL, true, false, 120.0
         );
 
         assertNotNull(result);
-        assertFalse(result.get().isEmpty());
-        System.out.println("Classification: " + result.get());
+        assertFalse(((StringValue) result.get("category")).get().isEmpty());
+        System.out.println("Classification: " + ((StringValue) result.get("category")).get());
         System.out.println("OK");
     }
 
@@ -197,14 +198,14 @@ public class TestGemma4E2BInference {
     public void testCSVToJSON() {
         System.out.println("\n[TEST] Gemma 4 E2B - CSV to JSON");
 
-        Value<String> result = transformAction.execute(
+        DictionaryValue result = transformAction.execute(
             "Name,Age,City\nAlice,28,Boston\nBob,35,Chicago",
             "csv", "compact", "array", MODEL, 120.0
         );
 
         assertNotNull(result);
-        assertTrue(isValidJSON(result.get()), "Output should be valid JSON");
-        System.out.println("JSON: " + result.get());
+        assertTrue(isValidJSON(((StringValue) result.get("json")).get()), "Output should be valid JSON");
+        System.out.println("JSON: " + ((StringValue) result.get("json")).get());
         System.out.println("OK");
     }
 
@@ -212,13 +213,13 @@ public class TestGemma4E2BInference {
     public void testDateNormalization() {
         System.out.println("\n[TEST] Gemma 4 E2B - Date Normalization");
 
-        Value<String> result = normalizeAction.execute(
+        DictionaryValue result = normalizeAction.execute(
             "January 15, 2025", "date", "YYYY-MM-DD", MODEL, true, 120.0
         );
 
         assertNotNull(result);
-        assertFalse(result.get().isEmpty());
-        System.out.println("Output: " + result.get());
+        assertFalse(((StringValue) result.get("result")).get().isEmpty());
+        System.out.println("Output: " + ((StringValue) result.get("result")).get());
         System.out.println("OK");
     }
 

@@ -1,6 +1,7 @@
 package com.automationanywhere.botcommand;
 
-import com.automationanywhere.botcommand.data.Value;
+import com.automationanywhere.botcommand.data.impl.DictionaryValue;
+import com.automationanywhere.botcommand.data.impl.StringValue;
 import com.automationanywhere.botcommand.utils.ModelManager;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
@@ -99,7 +100,7 @@ public class TestPrompt {
 
         long startTime = System.currentTimeMillis();
 
-        Value<String> result = promptAction.execute(
+        DictionaryValue result = promptAction.execute(
             prompt,
             "qwen2.5-3b",
             60.0,
@@ -110,14 +111,14 @@ public class TestPrompt {
 
         System.out.println("\n✓ Completed in " + elapsed + "ms");
         System.out.println("\nModel response:");
-        System.out.println("  " + result.get());
+        System.out.println("  " + ((StringValue) result.get("response")).get());
 
         assertNotNull(result, "Result should not be null");
-        assertNotNull(result.get(), "Result value should not be null");
-        assertFalse(result.get().isEmpty(), "Response should not be empty");
-        assertTrue(result.get().length() > 0, "Response should have content");
+        assertNotNull(((StringValue) result.get("response")).get(), "Result value should not be null");
+        assertFalse(((StringValue) result.get("response")).get().isEmpty(), "Response should not be empty");
+        assertTrue(((StringValue) result.get("response")).get().length() > 0, "Response should have content");
 
-        System.out.println("\nResponse length: " + result.get().length() + " characters");
+        System.out.println("\nResponse length: " + ((StringValue) result.get("response")).get().length() + " characters");
         System.out.println("\n✓ TinyLlama inference successful!");
     }
 
@@ -136,7 +137,7 @@ public class TestPrompt {
 
         long startTime = System.currentTimeMillis();
 
-        Value<String> result = promptAction.execute(
+        DictionaryValue result = promptAction.execute(
             prompt,
             "qwen2.5-3b",
             30.0,
@@ -147,11 +148,11 @@ public class TestPrompt {
 
         System.out.println("\n✓ Completed in " + elapsed + "ms");
         System.out.println("\nModel response:");
-        System.out.println("  " + result.get());
+        System.out.println("  " + ((StringValue) result.get("response")).get());
 
         assertNotNull(result);
-        assertNotNull(result.get());
-        assertFalse(result.get().isEmpty());
+        assertNotNull(((StringValue) result.get("response")).get());
+        assertFalse(((StringValue) result.get("response")).get().isEmpty());
 
         if (elapsed < 10000) {
             System.out.println("\n✓ Fast inference confirmed (< 10 seconds) - model was cached!");
@@ -175,7 +176,7 @@ public class TestPrompt {
 
         long startTime = System.currentTimeMillis();
 
-        Value<String> result = promptAction.execute(
+        DictionaryValue result = promptAction.execute(
             prompt,
             "qwen2.5-3b",
             30.0,
@@ -186,11 +187,11 @@ public class TestPrompt {
 
         System.out.println("\n✓ Completed in " + elapsed + "ms");
         System.out.println("\nModel response:");
-        System.out.println("  " + result.get());
+        System.out.println("  " + ((StringValue) result.get("response")).get());
 
         assertNotNull(result);
-        assertNotNull(result.get());
-        assertFalse(result.get().isEmpty());
+        assertNotNull(((StringValue) result.get("response")).get());
+        assertFalse(((StringValue) result.get("response")).get().isEmpty());
 
         if (elapsed < 5000) {
             System.out.println("\n✓ Excellent performance (< 5 seconds)!");
