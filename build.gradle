@@ -67,7 +67,13 @@ configure(allprojects){
 	classes.dependsOn commandCodeGen
 
 	shadowJar {
+		dependsOn incrementBuildNumber
 		archiveBaseName = project.name
+		archiveVersion = provider {
+			def props = new Properties()
+			versionPropsFile.withInputStream { props.load(it) }
+			"2.11.0-b${props['build.number']}"
+		}
 		classifier = null
 		mergeServiceFiles('META-INF/spring.*')
 		mergeServiceFiles('META-INF/services/java.sql.Driver')
