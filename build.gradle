@@ -25,9 +25,18 @@ configure(allprojects){
 		testNgVersion = '6.14.3'
 		loggerVersion = '2.20.0'
 		jnaVersion = '5.3.1'
-		version '2.11.0'
 	}
 	group "$groupName"
+
+	// Set project version from build number: 2.12.{buildNum}
+	// Build number is incremented during each build, making every artifact uniquely versioned
+	def versionPropsFile = rootProject.file('src/main/resources/version.properties')
+	def versionProps = new Properties()
+	if (versionPropsFile.exists()) {
+		versionPropsFile.withInputStream { versionProps.load(it) }
+	}
+	def nextBuildNum = ((versionProps['build.number'] ?: '0') as Integer) + 1
+	version = "2.12.${nextBuildNum}"
 
 	sourceCompatibility = JavaVersion.VERSION_11
 
@@ -49,8 +58,6 @@ configure(allprojects){
 		generatePackageWithDateTime = true
 	}
 
-	def versionPropsFile = rootProject.file('src/main/resources/version.properties')
-
 	task incrementBuildNumber {
 		doFirst {
 			def props = new Properties()
@@ -58,7 +65,7 @@ configure(allprojects){
 			def buildNum = (props['build.number'] as Integer) + 1
 			props['build.number'] = buildNum.toString()
 			versionPropsFile.withOutputStream { props.store(it, null) }
-			println "Build number incremented to: ${buildNum}"
+			println "Build version: 2.12.${buildNum}"
 		}
 	}
 
@@ -69,11 +76,7 @@ configure(allprojects){
 	shadowJar {
 		dependsOn incrementBuildNumber
 		archiveBaseName = project.name
-		archiveVersion = provider {
-			def props = new Properties()
-			versionPropsFile.withInputStream { props.load(it) }
-			"2.11.0-b${props['build.number']}"
-		}
+		// archiveVersion defaults to project.version (2.12.{buildNum})
 		classifier = null
 		mergeServiceFiles('META-INF/spring.*')
 		mergeServiceFiles('META-INF/services/java.sql.Driver')
