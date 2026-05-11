@@ -157,8 +157,8 @@ public class TestNewModels {
     @Test
     public void testAllModelTypesCount() {
         System.out.println("\n[TEST] Total model count is 6");
-        assertEquals(ModelManager.ModelType.values().length, 6,
-            "Should have 6 model types (4 original + 2 new)");
+        assertEquals(ModelManager.ModelType.values().length, 7,
+            "Should have 7 model types (6 original + Qwen2.5-Coder 3B)");
         System.out.println("  OK: 6 models total");
     }
 

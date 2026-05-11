@@ -105,6 +105,18 @@ public class ModelManager {
             PromptTemplate.GEMMA4
         ),
 
+        // Qwen2.5-Coder 3B Instruct - Q4_K_M quantization (~1.93GB, 32K context, code specialist)
+        QWEN2_5_CODER_3B(
+            "qwen2.5-coder-3b",
+            "qwen2.5-coder-3b-q4",
+            "Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf",
+            "https://huggingface.co/bartowski/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf",
+            1977,
+            32768,
+            8192,
+            PromptTemplate.CHATML
+        ),
+
         // DeepSeek R1 Distill Qwen 1.5B - Q4_K_M quantization (~1.12GB, reasoning model)
         DEEPSEEK_R1_1_5B(
             "deepseek-r1-1.5b",
