@@ -55,7 +55,7 @@ configure(allprojects){
 		artifactName = project.name
 		group = "$groupName"
 		author = "Micah Smith"
-		generatePackageWithDateTime = true
+		generatePackageWithDateTime = false
 	}
 
 	task incrementBuildNumber {
