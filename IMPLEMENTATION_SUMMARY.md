@@ -32,7 +32,7 @@ Added the following dependencies with cross-platform support:
 
 **Features:**
 - **Singleton pattern** with thread-safe double-checked locking
-- **Model cache directory:** `~/.aa-slm-models/` (cross-platform)
+- **Model cache directory:** `~/localAI/` (cross-platform)
 - **Model types supported:**
   - TinyLlama 1.1B Q8 (~1.2GB)
   - Phi-2 2.7B Q4 (~800MB)
@@ -130,7 +130,7 @@ All file operations use cross-platform APIs:
 
 ### Model Cache Structure
 ```
-~/.aa-slm-models/
+~/localAI/
 ├── tinyllama-q8/
 │   ├── model_q8.onnx
 │   └── tokenizer.json

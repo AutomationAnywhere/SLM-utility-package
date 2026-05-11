@@ -30,7 +30,7 @@ public class ModelManager {
     // Model cache directory - cross-platform using user.home
     private static final Path MODEL_CACHE_DIR = Paths.get(
         System.getProperty("user.home"),
-        ".aa-slm-models"
+        "localAI"
     );
 
     // Loaded models cache (LlamaModel instances)

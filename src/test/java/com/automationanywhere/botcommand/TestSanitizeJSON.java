@@ -47,7 +47,7 @@ public class TestSanitizeJSON {
         System.out.println("\n[TEST] Cross-platform path handling");
 
         // Get model cache directory
-        Path cacheDir = Paths.get(System.getProperty("user.home"), ".aa-slm-models");
+        Path cacheDir = Paths.get(System.getProperty("user.home"), "localAI");
         System.out.println("Model cache directory: " + cacheDir.toAbsolutePath());
 
         // Verify path uses forward slashes or proper separators

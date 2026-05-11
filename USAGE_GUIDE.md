@@ -22,8 +22,8 @@ This package provides on-device AI inference for Automation Anywhere bots using 
 4. Returns true if device is ready
 
 **Model storage locations**:
-- **Windows**: `C:\Users\{username}\.aa-slm-models\`
-- **macOS**: `/Users/{username}/.aa-slm-models/`
+- **Windows**: `C:\Users\{username}\localAI\`
+- **macOS**: `/Users/{username}/localAI/`
 
 **Parameters**:
 - **Model**: Choose from TinyLlama (669MB), Gemma 2B (1.7GB), or Qwen2.5 3B (2.1GB)
@@ -369,11 +369,11 @@ The `LlamaInference.generateText()` method can power:
 ## Model Storage
 
 **Storage Locations**:
-- **Windows**: `C:\Users\{username}\.aa-slm-models\`
-- **macOS**: `/Users/{username}/.aa-slm-models/`
+- **Windows**: `C:\Users\{username}\localAI\`
+- **macOS**: `/Users/{username}/localAI/`
 
 ```
-.aa-slm-models/
+localAI/
 ├── tinyllama-1.1b-q4/
 │   └── tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf (669MB)
 ├── gemma-2b-q4/

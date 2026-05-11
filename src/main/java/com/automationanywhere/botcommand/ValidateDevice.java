@@ -35,8 +35,8 @@ import static com.automationanywhere.commandsdk.model.DataType.DICTIONARY;
  * 4. Return a Dictionary with model details and ready status
  *
  * Model storage locations:
- * - Windows: C:\Users\{username}\.aa-slm-models\
- * - macOS: /Users/{username}/.aa-slm-models/
+ * - Windows: C:\Users\{username}\localAI\
+ * - macOS: /Users/{username}/localAI/
  *
  * First-time download may take 5-15 minutes depending on internet speed.
  *
@@ -46,7 +46,7 @@ import static com.automationanywhere.commandsdk.model.DataType.DICTIONARY;
 @CommandPkg(
     label = "Validate Device",
     name = "validateDevice",
-    description = "Download or validate that a model is available on the device. Models stored in: Windows (C:\\Users\\{username}\\.aa-slm-models\\), macOS (/Users/{username}/.aa-slm-models/)",
+    description = "Download or validate that a model is available on the device. Models stored in: Windows (C:\\Users\\{username}\\localAI\\), macOS (/Users/{username}/localAI/)",
     node_label = "Validate Device: {{modelName}}",
     icon = "pkg.svg",
     comment = true,

@@ -31,8 +31,8 @@ import static com.automationanywhere.commandsdk.model.DataType.BOOLEAN;
  *
  * Use this to free up disk space when a model is no longer needed.
  * Model storage locations:
- * - Windows: C:\Users\{username}\.aa-slm-models\
- * - macOS: /Users/{username}/.aa-slm-models/
+ * - Windows: C:\Users\{username}\localAI\
+ * - macOS: /Users/{username}/localAI/
  *
  * Note: Model files are large (669MB-5GB), so deletion can free significant space.
  */

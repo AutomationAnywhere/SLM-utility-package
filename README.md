@@ -25,7 +25,7 @@ Run AI inference **entirely on-device** with no cloud APIs, no GPU, and no inter
 | `gemma4-e2b` | 5.1B | ~3.1GB | 128K | Best quality, reasoning tasks |
 | `deepseek-r1-1.5b` | 1.5B | ~1.1GB | 128K | Chain-of-thought reasoning |
 
-Models are automatically downloaded from HuggingFace on first use and cached at `~/.aa-slm-models/`.
+Models are automatically downloaded from HuggingFace on first use and cached at `~/localAI/`.
 
 > Gemma 4 support requires a [custom java-llama.cpp fork](https://github.com/micahman33/java-llama.cpp) built against llama.cpp b8648.
 
