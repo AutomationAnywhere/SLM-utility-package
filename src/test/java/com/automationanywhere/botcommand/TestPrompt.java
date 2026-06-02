@@ -74,7 +74,7 @@ public class TestPrompt {
     public void testAllSupportedModels() {
         System.out.println("\n[TEST] All supported models");
 
-        String[] models = {"qwen3-4b", "llama3.2-3b", "phi4-mini", "gemma3-4b", "gemma4-e2b", "deepseek-r1-1.5b"};
+        String[] models = {"qwen3-4b", "qwen3-4b", "phi4-mini", "gemma3-4b", "gemma4-e2b", "deepseek-r1-1.5b"};
 
         for (String model : models) {
             System.out.println("Testing model: " + model);

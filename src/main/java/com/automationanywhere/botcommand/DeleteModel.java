@@ -3,6 +3,7 @@ package com.automationanywhere.botcommand;
 import com.automationanywhere.botcommand.data.Value;
 import com.automationanywhere.botcommand.data.impl.BooleanValue;
 import com.automationanywhere.botcommand.exception.BotCommandException;
+import com.automationanywhere.botcommand.utils.LlamaServerManager;
 import com.automationanywhere.botcommand.utils.ModelManager;
 import com.automationanywhere.commandsdk.annotations.*;
 import com.automationanywhere.commandsdk.annotations.BotCommand;
@@ -118,11 +119,11 @@ public class DeleteModel {
             long fileSize = Files.size(modelPath);
             logger.info("Found model file: {}MB", fileSize / 1024 / 1024);
 
-            // Unload model from memory if currently loaded
-            if (manager.isModelLoaded(modelType)) {
-                logger.info("Model is currently loaded in memory. Unloading...");
-                manager.unloadModel(modelType);
-                logger.info("Model unloaded from memory");
+            // Stop inference server if it's running this model (server will restart on next use)
+            LlamaServerManager server = LlamaServerManager.getInstance();
+            if (server.isRunning()) {
+                logger.info("Stopping inference server before deleting model...");
+                server.stop();
             }
 
             // Delete the model file

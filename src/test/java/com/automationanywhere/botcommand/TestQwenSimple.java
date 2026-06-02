@@ -1,21 +1,23 @@
 package com.automationanywhere.botcommand;
 
 import com.automationanywhere.botcommand.utils.LlamaInference;
+import com.automationanywhere.botcommand.utils.LlamaServerManager;
 import com.automationanywhere.botcommand.utils.ModelManager;
-import de.kherud.llama.InferenceParameters;
-import de.kherud.llama.LlamaOutput;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
+import static org.testng.Assert.*;
+
 /**
- * Simple direct test of Qwen2.5 model to diagnose generation issues
+ * Direct test of Qwen3 model via the llama-server subprocess approach.
+ * Requires the model to be downloaded and llama-server binary to be installed.
  */
 public class TestQwenSimple {
 
     @BeforeClass
     public void setUp() {
-        System.out.println("=== Direct Qwen2.5 Test ===");
+        System.out.println("=== Direct Qwen3 4B Test (via llama-server) ===");
     }
 
     @AfterClass
@@ -25,112 +27,44 @@ public class TestQwenSimple {
 
     @Test
     public void testQwenWithChatTemplate() throws Exception {
-        System.out.println("\n[TEST] Qwen2.5 with proper chat template");
+        System.out.println("\n[TEST] Qwen3 4B with chat template via LlamaInference");
 
         ModelManager.ModelType modelType = ModelManager.ModelType.QWEN3_4B;
-        ModelManager manager = ModelManager.getInstance();
 
-        // Get the model
-        System.out.println("Loading model...");
-        var model = manager.getModel(modelType);
-        System.out.println("Model loaded!");
-
-        // Format prompt with Qwen2.5 chat template
-        String prompt = "<|im_start|>system\nYou are a helpful assistant<|im_end|>\n" +
-                       "<|im_start|>user\nWhat is the capital of Florida? Answer in one word.<|im_end|>\n" +
-                       "<|im_start|>assistant\n";
-
-        System.out.println("Prompt: " + prompt);
-        System.out.println("\nStarting generation...");
-
-        InferenceParameters params = new InferenceParameters(prompt)
-            .setTemperature(0.3f)
-            .setNPredict(50);
-
-        StringBuilder output = new StringBuilder();
+        System.out.println("Loading model via llama-server...");
         long startTime = System.currentTimeMillis();
-        int tokenCount = 0;
 
-        try {
-            for (LlamaOutput result : model.generate(params)) {
-                String token = result.toString();
-                output.append(token);
-                System.out.print(token);  // Print each token as it comes
-                System.out.flush();
-                tokenCount++;
+        LlamaInference inference = new LlamaInference(modelType);
 
-                // Safety: stop after 100 tokens
-                if (tokenCount > 100) {
-                    System.out.println("\n[Stopping after 100 tokens]");
-                    break;
-                }
-            }
+        long loadTime = System.currentTimeMillis() - startTime;
+        System.out.println("Model loaded in " + loadTime + "ms");
 
-            long elapsed = System.currentTimeMillis() - startTime;
-            System.out.println("\n\nGeneration completed!");
-            System.out.println("Time: " + elapsed + "ms");
-            System.out.println("Tokens: " + tokenCount);
-            System.out.println("Output: " + output.toString());
+        String prompt = "What is the capital of Florida? Answer in one word.";
+        System.out.println("Prompt: " + prompt);
 
-        } catch (Exception e) {
-            System.err.println("\nGeneration failed: " + e.getMessage());
-            e.printStackTrace();
-            throw e;
-        }
+        String result = inference.generateText(prompt, 50, 0.3f, 60);
+        System.out.println("Output: " + result);
+
+        assertNotNull(result);
+        assertFalse(result.trim().isEmpty(), "Result should not be empty");
+        System.out.println("OK: Qwen3 4B generated output successfully");
     }
 
     @Test
     public void testQwenWithoutChatTemplate() throws Exception {
-        System.out.println("\n[TEST] Qwen2.5 WITHOUT chat template (will likely fail)");
+        System.out.println("\n[TEST] Qwen3 4B raw generate via LlamaInference");
 
         ModelManager.ModelType modelType = ModelManager.ModelType.QWEN3_4B;
-        ModelManager manager = ModelManager.getInstance();
+        LlamaInference inference = new LlamaInference(modelType);
 
-        var model = manager.getModel(modelType);
-
-        // Raw prompt without chat template
         String prompt = "Q: What is 2+2? A:";
-
         System.out.println("Prompt: " + prompt);
-        System.out.println("\nStarting generation...");
 
-        InferenceParameters params = new InferenceParameters(prompt)
-            .setTemperature(0.3f)
-            .setNPredict(20);
+        String result = inference.generate(prompt, 30);
+        System.out.println("Output: " + result);
 
-        StringBuilder output = new StringBuilder();
-        long startTime = System.currentTimeMillis();
-        int tokenCount = 0;
-
-        try {
-            // Set a manual timeout
-            long timeoutMs = 10000; // 10 seconds
-
-            for (LlamaOutput result : model.generate(params)) {
-                if (System.currentTimeMillis() - startTime > timeoutMs) {
-                    System.out.println("\n[Manual timeout after 10 seconds - no tokens generated]");
-                    break;
-                }
-
-                String token = result.toString();
-                output.append(token);
-                System.out.print(token);
-                System.out.flush();
-                tokenCount++;
-            }
-
-            long elapsed = System.currentTimeMillis() - startTime;
-            System.out.println("\n\nResult:");
-            System.out.println("Time: " + elapsed + "ms");
-            System.out.println("Tokens generated: " + tokenCount);
-            System.out.println("Output: " + output.toString());
-
-            if (tokenCount == 0) {
-                System.out.println("\n✗ As expected: No tokens generated without proper chat template!");
-            }
-
-        } catch (Exception e) {
-            System.err.println("\nGeneration issue: " + e.getMessage());
-        }
+        // Raw prompt may or may not produce good output, but should not throw
+        assertNotNull(result);
+        System.out.println("OK: generate() completed without error");
     }
 }

@@ -137,12 +137,12 @@ public class TestGemma4E2BInference {
         System.out.println("[TEST] Gemma 4 E2B - Architecture Support Check");
         System.out.println("-".repeat(80));
 
-        // Load the model - should succeed with the updated fork
+        // Load the model via llama-server
         try {
             ModelManager.ModelType modelType = ModelManager.ModelType.GEMMA4_E2B;
-            ModelManager.getInstance().getModel(modelType);
+            new com.automationanywhere.botcommand.utils.LlamaInference(modelType);
 
-            System.out.println("OK: Gemma 4 architecture is supported by current java-llama.cpp fork");
+            System.out.println("OK: Gemma 4 architecture is supported via llama-server subprocess");
 
         } catch (Exception e) {
             System.out.println("ERROR: " + e.getMessage());

@@ -107,8 +107,8 @@ public class TestNewModels {
 
     @Test
     public void testModelSizesUnder4GB() {
-        System.out.println("\n[TEST] Both new models are under 4GB");
-        int maxSizeMB = 4 * 1024; // 4GB in MB
+        System.out.println("\n[TEST] New models are under 4GB");
+        int maxSizeMB = 4 * 1024;
 
         ModelManager.ModelType gemma4 = ModelManager.ModelType.GEMMA4_E2B;
         ModelManager.ModelType deepseek = ModelManager.ModelType.DEEPSEEK_R1_1_5B;
@@ -144,14 +144,14 @@ public class TestNewModels {
 
     @Test
     public void testSupportedModelIdsIncludesNewModels() {
-        System.out.println("\n[TEST] supportedModelIds() includes new models");
+        System.out.println("\n[TEST] supportedModelIds() includes expected models");
         String supported = ModelManager.ModelType.supportedModelIds();
 
         assertTrue(supported.contains("gemma4-e2b"), "Should list gemma4-e2b");
         assertTrue(supported.contains("deepseek-r1-1.5b"), "Should list deepseek-r1-1.5b");
 
         System.out.println("  Supported models: " + supported);
-        System.out.println("  OK: both new models listed");
+        System.out.println("  OK: expected models listed");
     }
 
     @Test

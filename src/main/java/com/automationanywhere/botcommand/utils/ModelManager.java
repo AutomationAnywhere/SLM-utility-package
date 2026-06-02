@@ -1,160 +1,107 @@
 package com.automationanywhere.botcommand.utils;
 
-import de.kherud.llama.LlamaModel;
-import de.kherud.llama.ModelParameters;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Singleton manager for handling llama.cpp model lifecycle across bot sessions.
- * Ensures models are loaded once and reused for better performance.
- * Thread-safe implementation for concurrent bot execution.
+ * Manages GGUF model file paths and provides the ModelType registry.
  *
- * Uses java-llama.cpp library which supports:
- * - Windows (x64)
- * - macOS (Intel x86-64 + Apple Silicon ARM64)
- * - Linux (x86-64, aarch64)
- * - CPU-only inference (no GPU required)
- * - GGUF model format (quantized for efficiency)
+ * Model loading and inference are handled by LlamaServerManager, which runs
+ * the official llama.cpp llama-server binary as a subprocess. This avoids the
+ * JNI binding (de.kherud:llama) that was pinned to llama.cpp b4916 and did
+ * not support qwen3, gemma4, or other architectures added after March 2025.
+ *
+ * Model storage locations:
+ *   Windows: %LOCALAPPDATA%\AutomationAnywhere\LocalAI\
+ *   macOS:   ~/localAI/
  */
 public class ModelManager {
     private static final Logger logger = LogManager.getLogger(ModelManager.class);
     private static volatile ModelManager instance;
 
-    // Model cache directory - cross-platform using user.home
-    private static final Path MODEL_CACHE_DIR = Paths.get(
-        System.getProperty("user.home"),
-        "localAI"
-    );
-
-    // Loaded models cache (LlamaModel instances)
-    private final Map<String, LlamaModel> loadedModels;
+    // Platform-specific model cache directory.
+    // Windows uses AppData\Local to avoid Controlled Folder Access (CFA) restrictions
+    // that can affect files stored directly under the user home root.
+    private static final Path MODEL_CACHE_DIR;
+    static {
+        String os = System.getProperty("os.name", "").toLowerCase();
+        if (os.contains("windows")) {
+            String localAppData = System.getenv("LOCALAPPDATA");
+            if (localAppData == null || localAppData.isEmpty()) {
+                localAppData = System.getProperty("user.home") + "\\AppData\\Local";
+            }
+            MODEL_CACHE_DIR = Paths.get(localAppData, "AutomationAnywhere", "LocalAI");
+        } else {
+            MODEL_CACHE_DIR = Paths.get(System.getProperty("user.home"), "localAI");
+        }
+    }
 
     /**
-     * Model configuration with GGUF format support.
+     * All supported GGUF models.
      *
-     * To add a new model, update this enum only:
-     * - id / directory / file name
-     * - download URL
-     * - prompt template profile
+     * To add a new model, add a new enum entry here only — all action dropdowns
+     * read from this enum via ActionUtils.resolveModelType().
      */
     public enum ModelType {
-        // Gemma 3 4B IT - Q4_K_M quantization (~2.49GB, 128K context)
+        // Gemma 3 4B IT - Q4_K_M (~2.49GB, 128K context)
         GEMMA3_4B(
-            "gemma3-4b",
-            "gemma3-4b-q4",
-            "gemma-3-4b-it-Q4_K_M.gguf",
+            "gemma3-4b", "gemma3-4b-q4", "gemma-3-4b-it-Q4_K_M.gguf",
             "https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf",
-            2490,
-            131072,
-            8192,
-            PromptTemplate.GEMMA3
-        ),
+            2490, 131072, 8192, PromptTemplate.GEMMA3),
 
-        // Qwen3 4B - Q4_K_M quantization (~2.5GB, 32K native context, ChatML + /no_think)
+        // Qwen3 4B - Q4_K_M (~2.5GB, 32K context, ChatML + /no_think)
         QWEN3_4B(
-            "qwen3-4b",
-            "qwen3-4b-q4",
-            "Qwen3-4B-Q4_K_M.gguf",
+            "qwen3-4b", "qwen3-4b-q4", "Qwen3-4B-Q4_K_M.gguf",
             "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf",
-            2500,
-            32768,
-            8192,
-            PromptTemplate.CHATML_QWEN3
-        ),
+            2500, 32768, 8192, PromptTemplate.CHATML_QWEN3),
 
-        // Llama 3.2 3B Instruct - Q4_K_M quantization (~2.0GB)
+        // Llama 3.2 3B Instruct - Q4_K_M (~2.0GB, 8K context)
         LLAMA3_2_3B(
-            "llama3.2-3b",
-            "llama3.2-3b-q4",
-            "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+            "llama3.2-3b", "llama3.2-3b-q4", "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
             "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
-            2020,
-            8192,
-            4096,
-            PromptTemplate.RAW
-        ),
+            2020, 8192, 4096, PromptTemplate.RAW),
 
-        // Phi-4 Mini Instruct - Q4_K_M quantization (~2.49GB, 128K context)
+        // Phi-4 Mini Instruct - Q4_K_M (~2.49GB, 128K context)
         PHI4_MINI(
-            "phi4-mini",
-            "phi4-mini-q4",
-            "microsoft_Phi-4-mini-instruct-Q4_K_M.gguf",
+            "phi4-mini", "phi4-mini-q4", "microsoft_Phi-4-mini-instruct-Q4_K_M.gguf",
             "https://huggingface.co/bartowski/microsoft_Phi-4-mini-instruct-GGUF/resolve/main/microsoft_Phi-4-mini-instruct-Q4_K_M.gguf",
-            2490,
-            131072,
-            8192,
-            PromptTemplate.PHI4
-        ),
+            2490, 131072, 8192, PromptTemplate.PHI4),
 
-        // Gemma 4 E2B Instruct - Q4_K_M quantization (~3.11GB, dense 2B effective params with PLE)
+        // Gemma 4 E2B Instruct - Q4_K_M (~3.11GB, 128K context)
         GEMMA4_E2B(
-            "gemma4-e2b",
-            "gemma4-e2b-q4",
-            "gemma-4-E2B-it-Q4_K_M.gguf",
+            "gemma4-e2b", "gemma4-e2b-q4", "gemma-4-E2B-it-Q4_K_M.gguf",
             "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf",
-            3185,
-            131072,
-            4096,
-            PromptTemplate.GEMMA4
-        ),
+            3185, 131072, 4096, PromptTemplate.GEMMA4),
 
-        // Qwen2.5-Coder 3B Instruct - Q4_K_M quantization (~1.93GB, 32K context, code specialist)
+        // Qwen2.5-Coder 3B Instruct - Q4_K_M (~1.93GB, 32K context)
         QWEN2_5_CODER_3B(
-            "qwen2.5-coder-3b",
-            "qwen2.5-coder-3b-q4",
-            "Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf",
+            "qwen2.5-coder-3b", "qwen2.5-coder-3b-q4", "Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf",
             "https://huggingface.co/bartowski/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf",
-            1977,
-            32768,
-            8192,
-            PromptTemplate.CHATML
-        ),
+            1977, 32768, 8192, PromptTemplate.CHATML),
 
-        // DeepSeek R1 Distill Qwen 1.5B - Q4_K_M quantization (~1.12GB, reasoning model)
+        // DeepSeek R1 Distill Qwen 1.5B - Q4_K_M (~1.12GB, reasoning)
         DEEPSEEK_R1_1_5B(
-            "deepseek-r1-1.5b",
-            "deepseek-r1-1.5b-q4",
-            "DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf",
+            "deepseek-r1-1.5b", "deepseek-r1-1.5b-q4", "DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf",
             "https://huggingface.co/bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf",
-            1147,
-            131072,
-            4096,
-            PromptTemplate.CHATML
-        );
+            1147, 131072, 4096, PromptTemplate.CHATML);
 
         public enum PromptTemplate {
-            RAW,
-            CHATML,
-            CHATML_QWEN3,   // ChatML + /no_think suffix to disable Qwen3 thinking mode
-            GEMMA3,
-            GEMMA4,
-            PHI4
+            RAW, CHATML, CHATML_QWEN3, GEMMA3, GEMMA4, PHI4
         }
 
-        private final String id;
-        private final String dirName;
-        private final String fileName;
-        private final String downloadUrl;
-        private final int sizeMB;
-        private final int contextWindow;
-        private final int maxOutputTokens;
+        private final String id, dirName, fileName, downloadUrl;
+        private final int sizeMB, contextWindow, maxOutputTokens;
         private final PromptTemplate promptTemplate;
 
-        ModelType(String id, String dirName, String fileName, String downloadUrl, int sizeMB, int contextWindow, int maxOutputTokens, PromptTemplate promptTemplate) {
-            this.id = id;
-            this.dirName = dirName;
-            this.fileName = fileName;
-            this.downloadUrl = downloadUrl;
-            this.sizeMB = sizeMB;
-            this.contextWindow = contextWindow;
-            this.maxOutputTokens = maxOutputTokens;
+        ModelType(String id, String dirName, String fileName, String downloadUrl,
+                  int sizeMB, int contextWindow, int maxOutputTokens, PromptTemplate promptTemplate) {
+            this.id = id; this.dirName = dirName; this.fileName = fileName;
+            this.downloadUrl = downloadUrl; this.sizeMB = sizeMB;
+            this.contextWindow = contextWindow; this.maxOutputTokens = maxOutputTokens;
             this.promptTemplate = promptTemplate;
         }
 
@@ -168,187 +115,56 @@ public class ModelManager {
         public PromptTemplate getPromptTemplate() { return promptTemplate; }
 
         public static ModelType fromId(String id) {
-            for (ModelType type : values()) {
-                if (type.id.equalsIgnoreCase(id)) {
-                    return type;
-                }
+            for (ModelType t : values()) {
+                if (t.id.equalsIgnoreCase(id)) return t;
             }
             throw new IllegalArgumentException("Unknown model type: " + id);
         }
 
         public static String supportedModelIds() {
-            StringBuilder ids = new StringBuilder();
-            for (ModelType type : values()) {
-                if (ids.length() > 0) {
-                    ids.append(", ");
-                }
-                ids.append("'").append(type.getId()).append("'");
+            StringBuilder sb = new StringBuilder();
+            for (ModelType t : values()) {
+                if (sb.length() > 0) sb.append(", ");
+                sb.append("'").append(t.id).append("'");
             }
-            return ids.toString();
+            return sb.toString();
         }
     }
 
-    /**
-     * Private constructor for singleton pattern
-     */
     private ModelManager() {
-        this.loadedModels = new ConcurrentHashMap<>();
-
-        logger.info("ModelManager initialized with llama.cpp");
+        logger.info("ModelManager initialized");
         logger.info("Model cache directory: {}", MODEL_CACHE_DIR.toAbsolutePath());
-
-        // Ensure cache directory exists
         ensureCacheDirectoryExists();
     }
 
-    /**
-     * Get singleton instance using double-checked locking
-     */
     public static ModelManager getInstance() {
         if (instance == null) {
             synchronized (ModelManager.class) {
-                if (instance == null) {
-                    instance = new ModelManager();
-                }
+                if (instance == null) instance = new ModelManager();
             }
         }
         return instance;
     }
 
-    /**
-     * Get or load a model
-     * @param modelType The type of model to load
-     * @return LlamaModel for the requested model
-     * @throws Exception if model cannot be loaded
-     */
-    public LlamaModel getModel(ModelType modelType) throws Exception {
-        String modelKey = modelType.getId();
-
-        // Check if already loaded
-        if (loadedModels.containsKey(modelKey)) {
-            logger.debug("Model {} already loaded, returning cached instance", modelKey);
-            return loadedModels.get(modelKey);
-        }
-
-        // Load model
-        synchronized (this) {
-            // Double-check after acquiring lock
-            if (loadedModels.containsKey(modelKey)) {
-                return loadedModels.get(modelKey);
-            }
-
-            logger.info("Loading model: {}", modelKey);
-            Path modelPath = getModelPath(modelType);
-
-            // Check if model exists locally
-            if (!Files.exists(modelPath)) {
-                logger.info("Model not found at {}, downloading...", modelPath);
-                ModelDownloader.downloadModel(modelType);
-            }
-
-            // Verify model file exists after download
-            if (!Files.exists(modelPath)) {
-                throw new RuntimeException("Model file not found after download: " + modelPath);
-            }
-
-            // Detect OS for logging
-            String os = System.getProperty("os.name").toLowerCase();
-            String arch = System.getProperty("os.arch").toLowerCase();
-            logger.info("Loading on OS: {}, Architecture: {}", os, arch);
-
-            try {
-                // Llama-3.2-3B (8K native) loads at its full native context.
-                // 128K models (Gemma3, Phi-4, Gemma4, DeepSeek-R1) and Qwen3 (32K native)
-                // are capped at 32K — enough for long documents without a full 128K KV cache cost.
-                int contextSize = Math.min(modelType.getContextWindow(), 32768);
-                if (modelType.getContextWindow() > 32768) {
-                    logger.info("Capping context to 32768 tokens (model supports up to {})", modelType.getContextWindow());
-                }
-
-                // Create model parameters (CPU-only, no GPU layers)
-                ModelParameters modelParams = new ModelParameters()
-                    .setModel(modelPath.toString())
-                    .setGpuLayers(0)  // CPU only - works on all platforms
-                    .setCtxSize(contextSize);  // Limit context to prevent OOM and timeouts
-
-                // Load the model
-                LlamaModel model = new LlamaModel(modelParams);
-
-                loadedModels.put(modelKey, model);
-                logger.info("Model {} loaded successfully from {}", modelKey, modelPath);
-
-                return model;
-
-            } catch (Exception e) {
-                logger.error("Failed to load model {}", modelKey, e);
-                throw new RuntimeException("Failed to load model: " + modelKey, e);
-            }
-        }
-    }
-
-    /**
-     * Check if a model is currently loaded
-     * @param modelType The model type to check
-     * @return true if loaded, false otherwise
-     */
-    public boolean isModelLoaded(ModelType modelType) {
-        return loadedModels.containsKey(modelType.getId());
-    }
-
-    /**
-     * Unload a specific model to free memory
-     * @param modelType The model to unload
-     */
-    public void unloadModel(ModelType modelType) {
-        String modelKey = modelType.getId();
-        synchronized (this) {
-            LlamaModel model = loadedModels.remove(modelKey);
-            if (model != null) {
-                try {
-                    model.close();
-                    logger.info("Model {} unloaded successfully", modelKey);
-                } catch (Exception e) {
-                    logger.warn("Error closing model {}", modelKey, e);
-                }
-            }
-        }
-    }
-
-    /**
-     * Unload all models and clean up resources
-     */
-    public void shutdown() {
-        synchronized (this) {
-            logger.info("Shutting down ModelManager, unloading all models...");
-            for (Map.Entry<String, LlamaModel> entry : loadedModels.entrySet()) {
-                try {
-                    entry.getValue().close();
-                    logger.debug("Closed model {}", entry.getKey());
-                } catch (Exception e) {
-                    logger.warn("Error closing model {}", entry.getKey(), e);
-                }
-            }
-            loadedModels.clear();
-        }
-    }
-
-    /**
-     * Get the file path for a model (cross-platform)
-     */
+    /** Resolves the filesystem path for a model's GGUF file. */
     public Path getModelPath(ModelType modelType) {
         return MODEL_CACHE_DIR.resolve(modelType.getDirName()).resolve(modelType.getFileName());
     }
 
-    /**
-     * Get the directory path for a model (cross-platform)
-     */
+    /** Resolves the directory that contains a model's GGUF file. */
     public Path getModelDirectory(ModelType modelType) {
         return MODEL_CACHE_DIR.resolve(modelType.getDirName());
     }
 
-    /**
-     * Ensure the cache directory exists (cross-platform)
-     */
+    public static Path getModelCacheDir() {
+        return MODEL_CACHE_DIR;
+    }
+
+    /** Delegates to LlamaServerManager to stop the running inference server. */
+    public void shutdown() {
+        LlamaServerManager.getInstance().shutdown();
+    }
+
     private void ensureCacheDirectoryExists() {
         try {
             if (!Files.exists(MODEL_CACHE_DIR)) {
@@ -356,15 +172,8 @@ public class ModelManager {
                 logger.info("Created model cache directory: {}", MODEL_CACHE_DIR);
             }
         } catch (Exception e) {
-            logger.error("Failed to create model cache directory", e);
-            throw new RuntimeException("Failed to create cache directory", e);
+            logger.error("Failed to create cache directory", e);
+            throw new RuntimeException("Failed to create cache directory: " + MODEL_CACHE_DIR, e);
         }
-    }
-
-    /**
-     * Get model cache directory
-     */
-    public static Path getModelCacheDir() {
-        return MODEL_CACHE_DIR;
     }
 }

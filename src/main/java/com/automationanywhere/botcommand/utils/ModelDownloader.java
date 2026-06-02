@@ -30,6 +30,14 @@ public class ModelDownloader {
         .build();
 
     /**
+     * Ensure the llama-server binary is installed.
+     * Delegates to LlamaBinaryManager which handles platform detection and download.
+     */
+    public static void ensureLlamaBinary() throws Exception {
+        LlamaBinaryManager.ensureInstalled();
+    }
+
+    /**
      * Download a model if it doesn't exist locally
      * @param modelType The model type to download
      * @throws Exception if download fails

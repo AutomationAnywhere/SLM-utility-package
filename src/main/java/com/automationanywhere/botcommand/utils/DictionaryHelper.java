@@ -12,7 +12,7 @@ import java.util.Map;
  *
  * Every action returns these four fields last, in this order:
  *   status        → "success" | "error"
- *   model         → model ID used (e.g. "qwen3-4b"), or "" for non-inference actions
+ *   model         → model ID used (e.g. "llama3.2-3b"), or "" for non-inference actions
  *   elapsed_ms    → wall-clock time in milliseconds as a string
  *   error_message → "" on success; human-readable error text on failure
  *

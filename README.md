@@ -2,48 +2,73 @@
 
 ![Java 11+](https://img.shields.io/badge/Java-11%2B-informational)
 ![Automation Anywhere](https://img.shields.io/badge/Automation%20Anywhere-A360-blue)
-![llama.cpp](https://img.shields.io/badge/llama.cpp-b8648-green)
-![Version](https://img.shields.io/badge/version-2.11.0-orange)
+![llama.cpp](https://img.shields.io/badge/llama.cpp-b9481-green)
+![Version](https://img.shields.io/badge/version-2.12.67-orange)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey)
 
-Run AI inference **entirely on-device** with no cloud APIs, no GPU, and no internet required at runtime. This Automation Anywhere package brings Small Language Models (SLMs) directly into your bot workflows using [llama.cpp](https://github.com/ggerganov/llama.cpp) and quantized GGUF models.
+Run AI inference **entirely on-device** with no cloud APIs, no GPU, and no internet required at runtime (after initial setup). This Automation Anywhere package brings Small Language Models (SLMs) directly into your bot workflows using the official [llama.cpp](https://github.com/ggerganov/llama.cpp) CPU binaries and quantized GGUF models.
 
 ## Why On-Device AI?
 
 - **Data stays local** - Sensitive data never leaves the machine. No API keys, no cloud endpoints.
 - **No GPU required** - Runs on standard CPUs (Intel x64, Apple Silicon ARM64).
 - **Zero runtime cost** - No per-token billing or API rate limits.
-- **Offline capable** - After initial model download, works completely offline.
-- **Cross-platform** - Windows, macOS (Intel + Apple Silicon), and Linux.
+- **Offline capable** - After initial model download and binary setup, works completely offline.
+- **Cross-platform** - Windows x64 and macOS (Apple Silicon ARM64 + Intel x64).
 
 ## Supported Models
 
 | Model | Parameters | Size | Context | Best For |
 |-------|-----------|------|---------|----------|
-| `qwen2.5-0.5b` | 0.5B | ~400MB | 128K | Fast classification, simple tasks |
-| `qwen2.5-1.5b` | 1.5B | ~900MB | 128K | General purpose (default) |
-| `qwen2.5-3b` | 3B | ~1.8GB | 128K | Higher quality text generation |
-| `gemma4-e2b` | 5.1B | ~3.1GB | 128K | Best quality, reasoning tasks |
-| `deepseek-r1-1.5b` | 1.5B | ~1.1GB | 128K | Chain-of-thought reasoning |
+| `qwen3-4b` | 4B | ~2.5GB | 32K | Best for structured output, JSON (default) |
+| `gemma3-4b` | 4B | ~2.5GB | 128K | Balanced all-rounder |
+| `phi4-mini` | 3.8B | ~2.5GB | 128K | Instructions & long-context reasoning |
+| `gemma4-e2b` | 5.1B | ~3.1GB | 128K | Highest quality output |
+| `llama3.2-3b` | 3B | ~2.0GB | 8K | Fast, proven baseline |
+| `deepseek-r1-1.5b` | 1.5B | ~1.1GB | 128K | Chain-of-thought reasoning, fastest |
+| `qwen2.5-coder-3b` | 3B | ~1.9GB | 32K | Code generation & scripting |
 
-Models are automatically downloaded from HuggingFace on first use and cached at `~/localAI/`.
+Models are automatically downloaded from HuggingFace on first use and cached at:
+- **Windows:** `%LOCALAPPDATA%\AutomationAnywhere\LocalAI\`
+- **macOS:** `~/localAI/`
 
-> Gemma 4 support requires a [custom java-llama.cpp fork](https://github.com/micahman33/java-llama.cpp) built against llama.cpp b8648.
+## How It Works
+
+This package uses the official llama.cpp CPU release binaries rather than a JNI binding. On first run, `ValidateDevice` downloads the appropriate llama-server binary (~15MB) for your platform. Each inference action starts `llama-server` as a subprocess on a free local port and communicates with it over HTTP — the same architecture llama.cpp uses for its own web interface.
+
+This approach means:
+- **All models work** — no architecture limitations from outdated JNI bindings
+- **Automatic updates** — new model families (Qwen3, Gemma 4, etc.) are supported immediately
+- **Identical behavior on Windows and macOS** — same binary, same HTTP API
 
 ## Actions
 
+### Validate Device
+
+**Run this once before using any inference actions.** Downloads and validates the llama-server binary for your platform, and optionally pre-downloads a model.
+
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| Model | Select | Which model to download/validate |
+
+**Returns:** Boolean - `true` if the device is ready for inference.
+
+---
+
 ### Prompt
 
-Send any text prompt to a local SLM and get a response. Use this for question answering, summarization, extraction, rewriting, or any general-purpose text task.
+Send any text prompt to a local SLM and get a response. Use for question answering, summarization, extraction, rewriting, or any general-purpose text task.
 
 **Parameters:**
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | Prompt Text | Text Area | *required* | Your instruction or question |
-| Model | Select | `qwen2.5-1.5b` | Which model to use |
+| Model | Select | `qwen3-4b` | Which model to use |
 | Timeout (seconds) | Number | 30 | Max generation time |
 | Temperature | Number | 0.3 | Randomness (0.0 = deterministic, 1.0 = creative) |
 
-**Returns:** String - the model's response.
+**Returns:** Dictionary with key `response` (String).
 
 ---
 
@@ -56,12 +81,12 @@ Categorize text into one of your predefined categories. Useful for routing ticke
 |-----------|------|---------|-------------|
 | Input Text | Text Area | *required* | Text to classify |
 | Categories | Text | *required* | Comma-separated list (e.g., `positive, negative, neutral`) |
-| Model | Select | `qwen2.5-1.5b` | Which model to use |
+| Model | Select | `qwen3-4b` | Which model to use |
 | Include Confidence | Checkbox | false | Append confidence score (0-1) |
 | Include Explanation | Checkbox | false | Append brief explanation |
 | Timeout (seconds) | Number | 30 | Max generation time |
 
-**Returns:** String - format: `category` or `category|0.95|explanation` when options enabled.
+**Returns:** String — `category` or `category|0.95|explanation` when options enabled.
 
 ---
 
@@ -76,16 +101,16 @@ Convert CSV, TSV, key-value pairs, tables, or lists into valid JSON.
 | Input Format | Select | `auto-detect` | csv, tsv, key-value, table, list, auto-detect |
 | Output Style | Select | `compact` | compact or pretty |
 | Output Type | Select | `array` | object `{}` or array `[{}]` |
-| Model | Select | `qwen2.5-1.5b` | Which model to use |
+| Model | Select | `qwen3-4b` | Which model to use |
 | Timeout (seconds) | Number | 30 | Max generation time |
 
-**Returns:** String - validated JSON output.
+**Returns:** String — validated JSON output.
 
 ---
 
 ### Normalize and Standardize
 
-Clean up inconsistent data formats - dates, phone numbers, addresses, names, emails.
+Clean up inconsistent data formats — dates, phone numbers, addresses, names, emails.
 
 **Parameters:**
 | Parameter | Type | Default | Description |
@@ -93,11 +118,11 @@ Clean up inconsistent data formats - dates, phone numbers, addresses, names, ema
 | Input Text | Text Area | *required* | Data to normalize |
 | Data Type | Select | `auto-detect` | phone, date, address, name, email, auto-detect, custom |
 | Output Format | Text | *(varies)* | Target format (e.g., `YYYY-MM-DD`) |
-| Model | Select | `qwen2.5-1.5b` | Which model to use |
+| Model | Select | `qwen3-4b` | Which model to use |
 | Preserve Original on Failure | Checkbox | true | Return input if normalization fails |
 | Timeout (seconds) | Number | 30 | Max generation time |
 
-**Returns:** String - normalized/standardized text.
+**Returns:** String — normalized/standardized text.
 
 ---
 
@@ -109,23 +134,59 @@ Make arbitrary text safe for embedding in JSON strings. Uses model-based intelli
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | Input Text | Text | *required* | Text to sanitize |
-| Model | Select | `qwen2.5-1.5b` | Which model to use |
+| Model | Select | `qwen3-4b` | Which model to use |
 | Timeout (seconds) | Number | 30 | Max generation time |
 
-**Returns:** String - JSON-safe text with properly escaped characters.
+**Returns:** String — JSON-safe text with properly escaped characters.
 
 ---
 
-### Validate Device
+### Extract Data
 
-Download and validate a model before using it. Run this once per model to ensure the GGUF file is available locally.
+Extract structured fields from unstructured text (invoices, emails, forms, etc.).
 
 **Parameters:**
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| Model | Select | Which model to download/validate |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| Input Text | Text Area | *required* | Text to extract from |
+| Fields to Extract | Text | *required* | Comma-separated field names |
+| Model | Select | `qwen3-4b` | Which model to use |
+| Timeout (seconds) | Number | 30 | Max generation time |
 
-**Returns:** Boolean - `true` if the model is ready for inference.
+**Returns:** Dictionary of extracted field → value pairs.
+
+---
+
+### Summarize Text
+
+Condense long text into a concise summary.
+
+**Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| Input Text | Text Area | *required* | Text to summarize |
+| Summary Length | Select | `medium` | short / medium / long |
+| Model | Select | `qwen3-4b` | Which model to use |
+| Timeout (seconds) | Number | 30 | Max generation time |
+
+**Returns:** String — the summary.
+
+---
+
+### Redact PII
+
+Identify and redact personally identifiable information from text.
+
+**Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| Input Text | Text Area | *required* | Text to redact |
+| PII Types | Text | *required* | Comma-separated types (e.g., `name, email, phone, ssn`) |
+| Replacement | Text | `[REDACTED]` | Replacement token |
+| Model | Select | `qwen3-4b` | Which model to use |
+| Timeout (seconds) | Number | 30 | Max generation time |
+
+**Returns:** String — text with PII replaced.
 
 ---
 
@@ -140,20 +201,23 @@ Remove a downloaded model from disk to free space.
 
 **Returns:** Boolean - `true` if the model was deleted (or didn't exist).
 
+---
+
 ## Building from Source
 
 ### Prerequisites
 
 - Java 11+
 - Gradle (wrapper included)
+- Internet access during build (to download dependencies)
 
 ### Build the package
 
 ```shell
-./gradlew clean build shadowJar
+./gradlew clean build
 ```
 
-The output JAR is at `build/libs/LocalAI-2.11.0.jar`.
+The output JAR is at `build/libs/LocalAI-2.12.{buildNum}.jar`.
 
 ### Run tests
 
@@ -161,7 +225,7 @@ The output JAR is at `build/libs/LocalAI-2.11.0.jar`.
 ./gradlew test
 ```
 
-Tests will automatically download models on first run (~1-4GB depending on model).
+> Tests that perform inference require the model to be downloaded (~2.5GB for Qwen3 4B) and the llama-server binary to be installed. Run `ValidateDevice` in a bot first, or the inference tests will trigger the download automatically.
 
 ## Architecture
 
@@ -172,27 +236,53 @@ src/main/java/com/automationanywhere/botcommand/
 ├── TransformToJSON.java         # Format-to-JSON conversion action
 ├── NormalizeAndStandardize.java # Data normalization action
 ├── SanitizeJSON.java            # JSON text sanitization action
-├── ValidateDevice.java          # Model download/validation action
+├── ExtractData.java             # Field extraction action
+├── SummarizeText.java           # Text summarization action
+├── RedactPII.java               # PII redaction action
+├── ValidateDevice.java          # Binary + model download/validation action
 ├── DeleteModel.java             # Model cleanup action
 └── utils/
-    ├── ModelManager.java        # Singleton model lifecycle & registry
-    ├── LlamaInference.java      # llama.cpp inference wrapper
+    ├── ModelManager.java        # Model registry, paths, and cache directory
+    ├── LlamaBinaryManager.java  # Downloads and manages the llama-server binary
+    ├── LlamaServerManager.java  # Manages the llama-server subprocess lifecycle
+    ├── LlamaInference.java      # Chat template formatting and inference entry point
     └── ModelDownloader.java     # HuggingFace model downloader
 ```
 
-**ModelManager** handles the full model lifecycle - downloading from HuggingFace, caching to disk, loading into memory, and cleanup. Models are loaded lazily on first use and cached in a thread-safe `ConcurrentHashMap`.
+### Inference Flow
 
-**LlamaInference** wraps the llama.cpp Java bindings with chat template formatting (ChatML for Qwen/DeepSeek, Gemma 4 format for Gemma 4, raw for others), timeout management via `ExecutorService`, and thinking-block stripping for reasoning models like DeepSeek R1.
+```
+Bot Action (ClassifyText, Prompt, etc.)
+    └── LlamaInference
+            ├── applyChatTemplate()    — formats prompt per model family
+            └── LlamaServerManager
+                    ├── ensureModelLoaded()  — starts/reuses llama-server subprocess
+                    └── complete()           — HTTP POST to /completion
+```
+
+**LlamaBinaryManager** fetches the official llama.cpp CPU release (currently b9481) from GitHub on first use and caches it to disk. Windows gets `llama-server.exe` from the zip; macOS gets `llama-server` from the tar.gz. The binary is extracted to `{modelCacheDir}/bin/`.
+
+**LlamaServerManager** is a singleton that keeps `llama-server` running between inference calls. When a different model is requested it stops the current server and starts a new one. The server binds to a random free port on `127.0.0.1`.
+
+**LlamaInference** applies the correct chat template for each model family before sending to the server: `CHATML_QWEN3` for Qwen3, `CHATML` for Qwen2.5/DeepSeek, `GEMMA3` for Gemma 3, `GEMMA4` for Gemma 4, `PHI4` for Phi-4 Mini.
 
 ## Dependencies
 
 | Library | Version | Purpose |
 |---------|---------|---------|
-| [java-llama.cpp](https://github.com/micahman33/java-llama.cpp) | 4.2.0 | llama.cpp JNI bindings (custom fork, llama.cpp b8648) |
-| [OkHttp](https://square.github.io/okhttp/) | 4.12.0 | Model downloads from HuggingFace |
+| [llama.cpp](https://github.com/ggerganov/llama.cpp) | b9481 (subprocess) | Local LLM inference — downloaded at runtime, MIT licensed |
+| [OkHttp](https://square.github.io/okhttp/) | 4.12.0 | Model downloads from HuggingFace + HTTP calls to llama-server |
 | [Gson](https://github.com/google/gson) | 2.10.1 | JSON validation and formatting |
 | Automation Anywhere SDK | 1.6.0 | Package SDK for A360 |
+
+## Windows Notes
+
+- llama-server binary and models are stored under `%LOCALAPPDATA%\AutomationAnywhere\LocalAI\` to avoid Windows Controlled Folder Access (CFA) restrictions.
+- `--no-mmap` is passed automatically on Windows to prevent memory-mapped file issues.
+- The llama-server process sets its working directory to the `bin\` folder so that Windows can locate its DLL dependencies.
 
 ## License
 
 Proprietary - Automation Anywhere
+
+llama.cpp is used under the [MIT License](https://github.com/ggerganov/llama.cpp/blob/master/LICENSE).

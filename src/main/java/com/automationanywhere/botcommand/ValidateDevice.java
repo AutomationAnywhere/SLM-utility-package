@@ -36,10 +36,11 @@ import static com.automationanywhere.commandsdk.model.DataType.STRING;
  * 4. Return a Dictionary with model details and ready status
  *
  * Model storage locations:
- * - Windows: C:\Users\{username}\localAI\
- * - macOS: /Users/{username}/localAI/
+ * - Windows: %LOCALAPPDATA%\AutomationAnywhere\LocalAI\
+ * - macOS:   ~/localAI/
  *
- * First-time download may take 5-15 minutes depending on internet speed.
+ * Also downloads the llama.cpp server binary (~9-15MB) on first use.
+ * First-time model download may take 5-15 minutes depending on internet speed.
  *
  * Return keys: supported, model_name, model_path, model_size_mb, status, message
  */
@@ -47,7 +48,7 @@ import static com.automationanywhere.commandsdk.model.DataType.STRING;
 @CommandPkg(
     label = "Validate Device",
     name = "validateDevice",
-    description = "Download or validate that a model is available on the device. Models stored in: Windows (C:\\Users\\{username}\\localAI\\), macOS (/Users/{username}/localAI/)",
+    description = "Download or validate that a model is available. Windows: %LOCALAPPDATA%\\AutomationAnywhere\\LocalAI\\, macOS: ~/localAI/",
     node_label = "Validate Device: {{modelName}}",
     icon = "pkg.svg",
     comment = true,
@@ -98,6 +99,15 @@ public class ValidateDevice {
 
             long startTime = System.currentTimeMillis();
             logger.info("Validating model: {} (~{}MB)", modelType.getId(), modelType.getSizeMB());
+
+            // Ensure the llama-server binary is installed (downloads ~9-15MB on first use)
+            try {
+                ModelDownloader.ensureLlamaBinary();
+            } catch (Exception e) {
+                logger.error("Failed to install llama-server binary", e);
+                throw new BotCommandException("Failed to install llama-server: " + e.getMessage() +
+                    ". Please check internet connection.");
+            }
 
             ModelManager manager = ModelManager.getInstance();
             Path modelPath = manager.getModelPath(modelType);
