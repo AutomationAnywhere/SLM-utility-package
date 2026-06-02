@@ -1,9 +1,13 @@
 package com.automationanywhere.botcommand.utils;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.*;
+import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.file.*;
 import java.util.zip.*;
@@ -39,7 +43,14 @@ public class LlamaBinaryManager {
         return BIN_DIR.resolve(os.contains("windows") ? "llama-server.exe" : "llama-server");
     }
 
-    public static void ensureInstalled() throws Exception {
+    /**
+     * Ensure the llama-server binary is present and up-to-date.
+     *
+     * Synchronized on the class to prevent two bot threads from racing through
+     * the Files.exists() check and writing the same files concurrently, which
+     * can corrupt the binary on Windows (open-file contention).
+     */
+    public static synchronized void ensureInstalled() throws Exception {
         Path serverPath = getLlamaServerPath();
         Path versionFile = BIN_DIR.resolve("version.txt");
 
@@ -55,7 +66,6 @@ public class LlamaBinaryManager {
                 logger.info("llama-server version mismatch (installed={}, embedded={}) — re-extracting",
                     installedTag, embeddedTag);
             } else if (embeddedTag == null) {
-                // No embedded version info — binary present, assume it's fine
                 logger.debug("llama-server already installed at: {}", serverPath);
                 return;
             }
@@ -63,19 +73,21 @@ public class LlamaBinaryManager {
 
         Files.createDirectories(BIN_DIR);
 
+        // actualTag is the tag that was actually installed (embedded or downloaded).
+        // This may differ from embeddedTag when the embedded resource is missing and
+        // the fallback downloads a newer release — write the real tag so that version
+        // staleness detection works correctly on the next JVM startup.
+        final String actualTag;
         if (embeddedTag != null) {
-            // Fast path: extract the archive that was bundled into the JAR at build time
             logger.info("Extracting embedded llama-server ({})...", embeddedTag);
-            extractEmbeddedArchive();
-            Files.writeString(versionFile, embeddedTag);
+            actualTag = extractEmbeddedArchive(embeddedTag);
         } else {
-            // Fallback: download from GitHub (e.g. developer build, no embedded resources)
             logger.info("No embedded binary found — downloading official llama.cpp CPU release...");
-            String tag = fetchLatestTag();
-            logger.info("Latest llama.cpp release: {}", tag);
-            downloadAndExtract(tag);
-            Files.writeString(versionFile, tag);
+            actualTag = fetchLatestTag();
+            logger.info("Downloading llama.cpp release: {}", actualTag);
+            downloadAndExtract(actualTag);
         }
+        Files.writeString(versionFile, actualTag);
 
         // Set executable bit on Mac/Linux
         String os = System.getProperty("os.name", "").toLowerCase();
@@ -86,7 +98,7 @@ public class LlamaBinaryManager {
         if (!Files.exists(serverPath)) {
             throw new RuntimeException("llama-server binary not found after installation. Check logs.");
         }
-        logger.info("llama-server installed at: {}", serverPath);
+        logger.info("llama-server {} installed at: {}", actualTag, serverPath);
     }
 
     /**
@@ -104,9 +116,14 @@ public class LlamaBinaryManager {
 
     /**
      * Extracts the platform-appropriate archive bundled in the JAR into BIN_DIR.
-     * Falls back to a GitHub download if the resource is unexpectedly absent.
+     * Falls back to a GitHub download if the resource is unexpectedly absent
+     * (e.g. a partial build where version.txt was embedded but the archive was not).
+     *
+     * @param embeddedTag the tag recorded in the JAR's version.txt
+     * @return the tag that was actually installed (may differ from embeddedTag if
+     *         the fallback GitHub download fetched a newer release)
      */
-    private static void extractEmbeddedArchive() throws Exception {
+    private static String extractEmbeddedArchive(String embeddedTag) throws Exception {
         String os   = System.getProperty("os.name", "").toLowerCase();
         String arch = System.getProperty("os.arch", "").toLowerCase();
 
@@ -128,13 +145,16 @@ public class LlamaBinaryManager {
         logger.info("Extracting embedded resource: {}", resourceName);
         try (InputStream is = LlamaBinaryManager.class.getResourceAsStream(resourceName)) {
             if (is == null) {
+                // Partial/inconsistent build: version.txt present but archive absent.
+                // Fall back to GitHub — return the actual downloaded tag so the caller
+                // writes the correct value to version.txt.
                 logger.warn("Embedded resource {} not found — falling back to GitHub download", resourceName);
-                String tag = fetchLatestTag();
-                downloadAndExtract(tag);
-                return;
+                String downloadedTag = fetchLatestTag();
+                downloadAndExtract(downloadedTag);
+                return downloadedTag; // <-- return real tag, not embeddedTag
             }
 
-            // Copy resource stream to a temp file, then reuse the existing extraction methods
+            // Copy resource stream to a temp file, then reuse the existing extraction methods.
             String suffix = isZip ? ".zip" : ".tar.gz";
             Path tmp = Files.createTempFile("llama-embedded-", suffix);
             try {
@@ -150,20 +170,33 @@ public class LlamaBinaryManager {
                 Files.deleteIfExists(tmp);
             }
         }
+        return embeddedTag; // embedded archive extracted successfully
     }
 
+    /**
+     * Fetches the latest llama.cpp release tag from the GitHub API.
+     * Uses Gson for robust JSON parsing instead of fragile string indexOf —
+     * the indexOf approach breaks silently if GitHub ever adds whitespace after
+     * the colon in {"tag_name": "bXXXX"} (valid JSON, different string layout).
+     */
     private static String fetchLatestTag() throws Exception {
         String apiUrl = "https://api.github.com/repos/ggerganov/llama.cpp/releases/latest";
-        URL url = new URL(apiUrl);
-        String json;
-        try (InputStream is = url.openStream()) {
-            json = new String(is.readAllBytes());
+        HttpURLConnection conn = (HttpURLConnection) new URL(apiUrl).openConnection();
+        conn.setConnectTimeout(15_000);
+        conn.setReadTimeout(15_000);
+        conn.setRequestProperty("Accept", "application/vnd.github+json");
+        try (InputStream is = conn.getInputStream()) {
+            String json = new String(is.readAllBytes());
+            JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+            JsonElement tagEl = obj.get("tag_name");
+            if (tagEl == null || tagEl.isJsonNull()) {
+                throw new RuntimeException(
+                    "GitHub API response missing 'tag_name' field. Response: " + json);
+            }
+            return tagEl.getAsString();
+        } finally {
+            conn.disconnect();
         }
-        int idx = json.indexOf("\"tag_name\":\"");
-        if (idx < 0) throw new RuntimeException("Could not parse tag_name from GitHub API");
-        int start = idx + 12;
-        int end = json.indexOf("\"", start);
-        return json.substring(start, end);
     }
 
     private static void downloadAndExtract(String tag) throws Exception {
@@ -224,14 +257,30 @@ public class LlamaBinaryManager {
         }
     }
 
-    /** Extract all entries from a ZIP file directly into BIN_DIR (no subdirectory prefix). */
+    /**
+     * Extracts all file entries from a ZIP into BIN_DIR, stripping any
+     * subdirectory path components so everything lands flat in BIN_DIR.
+     *
+     * Path-safety: after resolving the destination we verify it is still under
+     * BIN_DIR (canonical comparison), guarding against Zip Slip attacks where
+     * a crafted archive entry uses ".." sequences or absolute paths to escape
+     * the target directory.
+     */
     private static void extractZip(Path zipFile) throws Exception {
+        Path canonicalBinDir = BIN_DIR.toAbsolutePath().normalize();
         try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(zipFile))) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
                 if (entry.isDirectory()) { zis.closeEntry(); continue; }
-                String name = Paths.get(entry.getName()).getFileName().toString(); // strip any subdirs
-                Path dest = BIN_DIR.resolve(name);
+                // Use only the bare filename — strips any leading path components
+                String name = Paths.get(entry.getName()).getFileName().toString();
+                Path dest = BIN_DIR.resolve(name).toAbsolutePath().normalize();
+                // Zip Slip guard: reject entries whose resolved path escapes BIN_DIR
+                if (!dest.startsWith(canonicalBinDir)) {
+                    logger.warn("Skipping suspicious zip entry (path escape attempt): {}", entry.getName());
+                    zis.closeEntry();
+                    continue;
+                }
                 Files.copy(zis, dest, StandardCopyOption.REPLACE_EXISTING);
                 zis.closeEntry();
             }

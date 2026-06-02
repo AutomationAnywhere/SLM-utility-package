@@ -93,45 +93,55 @@ public class ModelDownloader {
             logger.info("Downloading {} from {}",
                 totalBytes > 0 ? formatBytes(totalBytes) : "unknown size", url);
 
-            // Download to temporary file first (cross-platform)
+            // Download to a temp file first, then atomically rename to the final destination.
+            // The temp file is in the same directory as the destination so that Files.move()
+            // is an atomic rename on most filesystems (avoids a partial file being visible).
             Path tempFile = Files.createTempFile(destination.getParent(), "download-", ".tmp");
+            try {
+                try (InputStream in = response.body().byteStream();
+                     OutputStream out = new BufferedOutputStream(Files.newOutputStream(tempFile))) {
 
-            try (InputStream in = response.body().byteStream();
-                 OutputStream out = new BufferedOutputStream(Files.newOutputStream(tempFile))) {
+                    byte[] buffer = new byte[8192];
+                    long downloadedBytes = 0;
+                    int bytesRead;
+                    long lastLogTime = System.currentTimeMillis();
+                    int lastPercent = 0;
 
-                byte[] buffer = new byte[8192];
-                long downloadedBytes = 0;
-                int bytesRead;
-                long lastLogTime = System.currentTimeMillis();
-                int lastPercent = 0;
+                    while ((bytesRead = in.read(buffer)) != -1) {
+                        out.write(buffer, 0, bytesRead);
+                        downloadedBytes += bytesRead;
 
-                while ((bytesRead = in.read(buffer)) != -1) {
-                    out.write(buffer, 0, bytesRead);
-                    downloadedBytes += bytesRead;
+                        // Log progress every 5 seconds or every 10%
+                        long currentTime = System.currentTimeMillis();
+                        int currentPercent = totalBytes > 0 ? (int)((downloadedBytes * 100) / totalBytes) : 0;
 
-                    // Log progress every 5 seconds or every 10%
-                    long currentTime = System.currentTimeMillis();
-                    int currentPercent = totalBytes > 0 ? (int)((downloadedBytes * 100) / totalBytes) : 0;
-
-                    if (currentTime - lastLogTime > 5000 || currentPercent >= lastPercent + 10) {
-                        if (totalBytes > 0) {
-                            logger.info("Download progress: {}/{} ({:.1f}%)",
-                                formatBytes(downloadedBytes), formatBytes(totalBytes),
-                                (downloadedBytes * 100.0) / totalBytes);
-                        } else {
-                            logger.info("Downloaded {}", formatBytes(downloadedBytes));
+                        if (currentTime - lastLogTime > 5000 || currentPercent >= lastPercent + 10) {
+                            if (totalBytes > 0) {
+                                logger.info("Download progress: {}/{} ({:.1f}%)",
+                                    formatBytes(downloadedBytes), formatBytes(totalBytes),
+                                    (downloadedBytes * 100.0) / totalBytes);
+                            } else {
+                                logger.info("Downloaded {}", formatBytes(downloadedBytes));
+                            }
+                            lastLogTime = currentTime;
+                            lastPercent = currentPercent;
                         }
-                        lastLogTime = currentTime;
-                        lastPercent = currentPercent;
                     }
+
+                    logger.info("Download completed: {}", formatBytes(downloadedBytes));
                 }
 
-                logger.info("Download completed: {}", formatBytes(downloadedBytes));
-            }
+                // Atomic rename to final destination
+                Files.move(tempFile, destination, StandardCopyOption.REPLACE_EXISTING);
+                logger.debug("Moved downloaded file to: {}", destination);
 
-            // Move temp file to final destination (atomic operation, cross-platform)
-            Files.move(tempFile, destination, StandardCopyOption.REPLACE_EXISTING);
-            logger.debug("Moved downloaded file to: {}", destination);
+            } catch (Exception e) {
+                // Clean up the partial temp file so multi-GB .tmp files don't accumulate
+                // on repeated download failures (disk-full, network errors, etc.)
+                try { Files.deleteIfExists(tempFile); }
+                catch (IOException ignored) { /* best-effort cleanup */ }
+                throw e;
+            }
 
         } catch (Exception e) {
             logger.error("Download failed for URL: {}", url, e);
