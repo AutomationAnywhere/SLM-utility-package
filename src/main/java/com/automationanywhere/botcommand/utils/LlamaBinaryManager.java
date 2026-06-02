@@ -9,17 +9,21 @@ import java.nio.file.*;
 import java.util.zip.*;
 
 /**
- * Downloads and manages the official llama.cpp binary package.
+ * Manages the official llama.cpp binary package.
  *
- * The official CPU release zips/tarballs (9-15MB) are downloaded once to
- * {modelCacheDir}/bin/ and reused across bot runs. This avoids the JNI
- * binding approach (de.kherud:llama) which was pinned to llama.cpp b4916
- * (March 2025) and does not support modern models like Qwen3 or Gemma4.
+ * The JAR bundles pre-downloaded llama.cpp CPU release archives under
+ * /llama-bin/ (placed there by the Gradle downloadLlamaBinaries task at
+ * build time).  On first use, ensureInstalled() extracts the right archive
+ * for the current platform into {modelCacheDir}/bin/ and caches it there.
+ *
+ * If the embedded archive is not present (e.g. a developer build without
+ * internet access at build time), the method falls back to downloading the
+ * latest release from GitHub — the original behaviour.
  *
  * Platforms:
- *   Windows x64:  llama-{tag}-bin-win-cpu-x64.zip   (~15MB)
- *   macOS ARM64:  llama-{tag}-bin-macos-arm64.tar.gz (~9MB)
- *   macOS x86_64: llama-{tag}-bin-macos-x64.tar.gz   (~10MB)
+ *   Windows x64:  llama-bin/windows-x64.zip       (~15MB)
+ *   macOS ARM64:  llama-bin/macos-arm64.tar.gz     (~9MB)
+ *   macOS x86_64: llama-bin/macos-x64.tar.gz       (~10MB)
  */
 public class LlamaBinaryManager {
     private static final Logger logger = LogManager.getLogger(LlamaBinaryManager.class);
@@ -36,28 +40,116 @@ public class LlamaBinaryManager {
     }
 
     public static void ensureInstalled() throws Exception {
-        if (Files.exists(getLlamaServerPath())) {
-            logger.debug("llama-server already installed at: {}", getLlamaServerPath());
-            return;
+        Path serverPath = getLlamaServerPath();
+        Path versionFile = BIN_DIR.resolve("version.txt");
+
+        // Check if already extracted at the correct version
+        String embeddedTag = getEmbeddedTag();
+        if (Files.exists(serverPath)) {
+            if (embeddedTag != null && Files.exists(versionFile)) {
+                String installedTag = Files.readString(versionFile).trim();
+                if (installedTag.equals(embeddedTag)) {
+                    logger.debug("llama-server {} already installed at: {}", embeddedTag, serverPath);
+                    return;
+                }
+                logger.info("llama-server version mismatch (installed={}, embedded={}) — re-extracting",
+                    installedTag, embeddedTag);
+            } else if (embeddedTag == null) {
+                // No embedded version info — binary present, assume it's fine
+                logger.debug("llama-server already installed at: {}", serverPath);
+                return;
+            }
         }
 
-        logger.info("llama-server not found — downloading official llama.cpp CPU release...");
         Files.createDirectories(BIN_DIR);
 
-        String tag = fetchLatestTag();
-        logger.info("Latest llama.cpp release: {}", tag);
-        downloadAndExtract(tag);
+        if (embeddedTag != null) {
+            // Fast path: extract the archive that was bundled into the JAR at build time
+            logger.info("Extracting embedded llama-server ({})...", embeddedTag);
+            extractEmbeddedArchive();
+            Files.writeString(versionFile, embeddedTag);
+        } else {
+            // Fallback: download from GitHub (e.g. developer build, no embedded resources)
+            logger.info("No embedded binary found — downloading official llama.cpp CPU release...");
+            String tag = fetchLatestTag();
+            logger.info("Latest llama.cpp release: {}", tag);
+            downloadAndExtract(tag);
+            Files.writeString(versionFile, tag);
+        }
 
         // Set executable bit on Mac/Linux
         String os = System.getProperty("os.name", "").toLowerCase();
         if (!os.contains("windows")) {
-            getLlamaServerPath().toFile().setExecutable(true, false);
+            serverPath.toFile().setExecutable(true, false);
         }
 
-        if (!Files.exists(getLlamaServerPath())) {
-            throw new RuntimeException("llama-server binary not found after extraction. Check logs.");
+        if (!Files.exists(serverPath)) {
+            throw new RuntimeException("llama-server binary not found after installation. Check logs.");
         }
-        logger.info("llama-server installed at: {}", getLlamaServerPath());
+        logger.info("llama-server installed at: {}", serverPath);
+    }
+
+    /**
+     * Returns the llama.cpp tag bundled in the JAR (from /llama-bin/version.txt),
+     * or null if no embedded binaries are present.
+     */
+    private static String getEmbeddedTag() {
+        try (InputStream is = LlamaBinaryManager.class.getResourceAsStream("/llama-bin/version.txt")) {
+            if (is == null) return null;
+            return new String(is.readAllBytes()).trim();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Extracts the platform-appropriate archive bundled in the JAR into BIN_DIR.
+     * Falls back to a GitHub download if the resource is unexpectedly absent.
+     */
+    private static void extractEmbeddedArchive() throws Exception {
+        String os   = System.getProperty("os.name", "").toLowerCase();
+        String arch = System.getProperty("os.arch", "").toLowerCase();
+
+        boolean isWindows = os.contains("windows");
+        String resourceName;
+        boolean isZip;
+
+        if (isWindows) {
+            resourceName = "/llama-bin/windows-x64.zip";
+            isZip = true;
+        } else if (arch.contains("aarch64") || arch.contains("arm")) {
+            resourceName = "/llama-bin/macos-arm64.tar.gz";
+            isZip = false;
+        } else {
+            resourceName = "/llama-bin/macos-x64.tar.gz";
+            isZip = false;
+        }
+
+        logger.info("Extracting embedded resource: {}", resourceName);
+        try (InputStream is = LlamaBinaryManager.class.getResourceAsStream(resourceName)) {
+            if (is == null) {
+                logger.warn("Embedded resource {} not found — falling back to GitHub download", resourceName);
+                String tag = fetchLatestTag();
+                downloadAndExtract(tag);
+                return;
+            }
+
+            // Copy resource stream to a temp file, then reuse the existing extraction methods
+            String suffix = isZip ? ".zip" : ".tar.gz";
+            Path tmp = Files.createTempFile("llama-embedded-", suffix);
+            try {
+                Files.copy(is, tmp, StandardCopyOption.REPLACE_EXISTING);
+                logger.info("Copied embedded archive: {}MB",
+                    Math.round(Files.size(tmp) / 1_048_576.0));
+                if (isZip) {
+                    extractZip(tmp);
+                } else {
+                    extractTarGz(tmp);
+                }
+            } finally {
+                Files.deleteIfExists(tmp);
+            }
+        }
     }
 
     private static String fetchLatestTag() throws Exception {

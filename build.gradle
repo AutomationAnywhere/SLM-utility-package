@@ -71,6 +71,66 @@ configure(allprojects){
 
 	processResources.dependsOn incrementBuildNumber
 
+	// ── Embedded llama.cpp binaries ───────────────────────────────────────────
+	// Downloads official llama.cpp CPU release archives at build time and stores
+	// them under src/main/resources/llama-bin/ so they get bundled into the
+	// shadow JAR.  This eliminates the runtime GitHub dependency and lets the
+	// package work in airgapped enterprise Bot Runner environments.
+	//
+	// The archives are NOT committed to git (see .gitignore).  They are fetched
+	// once and Gradle's incremental-task mechanism skips re-downloading if the
+	// output files already exist.
+	//
+	// To upgrade llama.cpp: change LLAMA_TAG, delete src/main/resources/llama-bin/,
+	// then rebuild.
+	def LLAMA_TAG = "b9481"
+	def llamaBinResDir = file("src/main/resources/llama-bin")
+
+	task downloadLlamaBinaries {
+		def versionFile  = new File(llamaBinResDir, "version.txt")
+		def winZip       = new File(llamaBinResDir, "windows-x64.zip")
+		def macArmTar    = new File(llamaBinResDir, "macos-arm64.tar.gz")
+		def macX64Tar    = new File(llamaBinResDir, "macos-x64.tar.gz")
+
+		outputs.files versionFile, winZip, macArmTar, macX64Tar
+
+		doLast {
+			llamaBinResDir.mkdirs()
+
+			def archives = [
+				(winZip)    : "https://github.com/ggerganov/llama.cpp/releases/download/${LLAMA_TAG}/llama-${LLAMA_TAG}-bin-win-cpu-x64.zip",
+				(macArmTar) : "https://github.com/ggerganov/llama.cpp/releases/download/${LLAMA_TAG}/llama-${LLAMA_TAG}-bin-macos-arm64.tar.gz",
+				(macX64Tar) : "https://github.com/ggerganov/llama.cpp/releases/download/${LLAMA_TAG}/llama-${LLAMA_TAG}-bin-macos-x64.tar.gz"
+			]
+
+			archives.each { destFile, url ->
+				if (destFile.exists()) {
+					println "> ${destFile.name} already present (${destFile.length() / 1024 / 1024}MB) — skipping download"
+					return
+				}
+				println "> Downloading ${destFile.name} from GitHub..."
+				def tmpFile = File.createTempFile("llama-dl-", "-" + destFile.name)
+				tmpFile.deleteOnExit()
+				try {
+					new URL(url).withInputStream { ins ->
+						tmpFile.withOutputStream { out -> out << ins }
+					}
+					def mb = tmpFile.length() / 1024 / 1024
+					println "  Downloaded ${destFile.name}: ${mb}MB"
+					tmpFile.renameTo(destFile)
+				} catch (Exception e) {
+					tmpFile.delete()
+					throw new GradleException("Failed to download ${url}: ${e.message}", e)
+				}
+			}
+
+			versionFile.text = LLAMA_TAG
+			println "> llama.cpp ${LLAMA_TAG} binaries ready in ${llamaBinResDir}"
+		}
+	}
+
+	processResources.dependsOn downloadLlamaBinaries
+
 	classes.dependsOn commandCodeGen
 
 	shadowJar {

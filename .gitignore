@@ -1,30 +1,19 @@
-# Gradle
-.gradle/
+# Gradle build output
 build/
-!gradle/wrapper/gradle-wrapper.jar
+.gradle/
 
-# IDE
+# IDE files
 .idea/
 *.iml
-*.ipr
 *.iws
-.vscode/
+*.ipr
+out/
 
-# OS
+# OS files
 .DS_Store
 Thumbs.db
 
-# Java
-*.class
-*.jar
-!libs/*.jar
-hs_err_pid*.log
-
-# Models (large GGUF files)
-*.gguf
-
-# Logs
-llama.log
-
-# Claude
-.claude/
+# llama.cpp binaries downloaded at build time by the downloadLlamaBinaries task.
+# These are bundled into the shadow JAR but are NOT committed to git.
+# To regenerate: delete this directory and run ./gradlew build
+src/main/resources/llama-bin/
