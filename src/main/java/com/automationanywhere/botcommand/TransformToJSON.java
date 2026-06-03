@@ -6,7 +6,6 @@ import com.automationanywhere.botcommand.data.impl.StringValue;
 import com.automationanywhere.botcommand.exception.BotCommandException;
 import com.automationanywhere.botcommand.utils.ActionUtils;
 import com.automationanywhere.botcommand.utils.DictionaryHelper;
-import com.automationanywhere.botcommand.utils.JsonGrammar;
 import com.automationanywhere.botcommand.utils.ModelManager;
 import com.automationanywhere.botcommand.utils.LlamaInference;
 import com.automationanywhere.commandsdk.annotations.*;
@@ -180,18 +179,22 @@ public class TransformToJSON {
             String prompt = buildTransformationPrompt(inputText, inputFormat, outputType);
             logger.debug("Generated prompt: {}", prompt.length() > 200 ? prompt.substring(0, 200) + "..." : prompt);
 
-            // Generate JSON with grammar constraint — llama-server's sampler physically
-            // rejects any token that would violate the GBNF grammar at each step, so
-            // the output is guaranteed to be valid JSON matching the requested structure.
-            // No preamble text, no markdown fences, no truncated objects are possible.
-            String grammar = JsonGrammar.forOutputType(outputType);
+            // Generate JSON.
+            //
+            // NOTE on grammar-constrained generation: JsonGrammar provides GBNF grammars
+            // that can be passed to llama-server to guarantee syntactically valid JSON at
+            // the token-sampling level.  However, grammar constraints work best when the
+            // prompt is "primed" — i.e. the opening '{' or '[' is already appended to the
+            // prompt so the model generates content from *inside* the structure rather than
+            // choosing the minimal valid path ({} or []).  The current chat-template prompt
+            // structure is not set up for that priming, so grammar is not applied here.
+            // When a primed-prompt path is added, wire in: JsonGrammar.forOutputType(outputType)
             int effectiveMaxTokens = Math.min(MAX_OUTPUT_TOKENS, modelType.getMaxOutputTokens());
             String rawResponse = inference.generateText(
                 prompt,
                 effectiveMaxTokens,
                 JSON_TEMPERATURE,
-                timeoutSeconds.intValue(),
-                grammar
+                timeoutSeconds.intValue()
             );
 
             // Parse, validate, and format the JSON response
@@ -348,6 +351,21 @@ public class TransformToJSON {
 
             boolean isArray  = parsed instanceof java.util.List;
             boolean isObject = parsed instanceof java.util.Map;
+
+            // Reject semantically empty results — {} or [] mean the model produced
+            // no useful transformation.  This most commonly happens when grammar-
+            // constrained generation is applied without prompt priming: the model
+            // takes the minimal-valid-JSON path instead of filling in the data.
+            if (isObject && ((java.util.Map<?,?>) parsed).isEmpty()) {
+                throw new BotCommandException(
+                    "Model returned empty JSON object {}. The transformation produced no data. " +
+                    "Try re-running, using a different model, or increasing the timeout.");
+            }
+            if (isArray && ((java.util.List<?>) parsed).isEmpty()) {
+                throw new BotCommandException(
+                    "Model returned empty JSON array []. The transformation produced no data. " +
+                    "Try re-running, using a different model, or increasing the timeout.");
+            }
 
             if (outputType.equals("array") && !isArray) {
                 throw new BotCommandException(

@@ -153,4 +153,75 @@ public class TestTransformToJSONParsing {
                 "Effective token limit must not exceed model max for " + modelId);
         }
     }
+
+    // ── Grammar minimal-path regression ──────────────────────────────────────
+    //
+    // When grammar-constrained generation is wired up WITHOUT prompt priming,
+    // models take the minimal-valid-JSON path: {} or [].  parseAndValidateJSON
+    // must reject these as meaningless output so the caller can retry or surface
+    // a useful error.
+
+    @Test(expectedExceptions = BotCommandException.class,
+          expectedExceptionsMessageRegExp = ".*[Ee]mpty.*|.*no (?:content|data|fields|properties|key).*|.*Model returned empty.*")
+    public void testEmptyObject_rejected() throws BotCommandException {
+        // {} is syntactically valid JSON but semantically empty — no useful data
+        // was transformed.  The action should NOT silently return {} to the bot.
+        action.parseAndValidateJSON("{}", "compact", "object");
+    }
+
+    @Test(expectedExceptions = BotCommandException.class,
+          expectedExceptionsMessageRegExp = ".*[Ee]mpty.*|.*no (?:content|data|fields|properties|items).*|.*Model returned empty.*")
+    public void testEmptyArray_rejected() throws BotCommandException {
+        // [] is likewise a no-op transformation.
+        action.parseAndValidateJSON("[]", "compact", "array");
+    }
+
+    @Test
+    public void testNonEmptyObject_accepted() throws BotCommandException {
+        // A real transformation result should pass through fine.
+        String result = action.parseAndValidateJSON(
+            "{\"Name\":\"Maria Chen\",\"Department\":\"Engineering\"}", "compact", "object");
+        assertNotNull(result);
+        assertTrue(result.contains("Maria Chen"));
+    }
+
+    @Test
+    public void testNonEmptyArray_accepted() throws BotCommandException {
+        String result = action.parseAndValidateJSON(
+            "[{\"Name\":\"Alice\"},{\"Name\":\"Bob\"}]", "compact", "array");
+        assertNotNull(result);
+        assertTrue(result.contains("Alice"));
+        assertTrue(result.contains("Bob"));
+    }
+
+    // ── JsonGrammar constants sanity-check ────────────────────────────────────
+
+    @Test
+    public void testJsonGrammarConstantsNonNull() {
+        assertNotNull(com.automationanywhere.botcommand.utils.JsonGrammar.ANY);
+        assertNotNull(com.automationanywhere.botcommand.utils.JsonGrammar.OBJECT_ONLY);
+        assertNotNull(com.automationanywhere.botcommand.utils.JsonGrammar.ARRAY_ONLY);
+        assertTrue(com.automationanywhere.botcommand.utils.JsonGrammar.ANY.contains("root"));
+        assertTrue(com.automationanywhere.botcommand.utils.JsonGrammar.OBJECT_ONLY.startsWith("root ::= object"));
+        assertTrue(com.automationanywhere.botcommand.utils.JsonGrammar.ARRAY_ONLY.startsWith("root ::= array"));
+    }
+
+    @Test
+    public void testJsonGrammarForOutputType_object() {
+        String g = com.automationanywhere.botcommand.utils.JsonGrammar.forOutputType("object");
+        assertTrue(g.startsWith("root ::= object"), "object outputType should yield OBJECT_ONLY grammar");
+    }
+
+    @Test
+    public void testJsonGrammarForOutputType_array() {
+        String g = com.automationanywhere.botcommand.utils.JsonGrammar.forOutputType("array");
+        assertTrue(g.startsWith("root ::= array"), "array outputType should yield ARRAY_ONLY grammar");
+    }
+
+    @Test
+    public void testJsonGrammarForOutputType_null() {
+        String g = com.automationanywhere.botcommand.utils.JsonGrammar.forOutputType(null);
+        assertNotNull(g);
+        assertTrue(g.contains("root"), "null outputType should yield ANY grammar");
+    }
 }
