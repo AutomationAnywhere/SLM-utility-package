@@ -189,16 +189,32 @@ public class LlamaServerManager {
     // ──────────────────────────────────────────────────────────────────────────
 
     /**
-     * Run a completion against the loaded model.
+     * Run a completion against the loaded model (no grammar constraint).
+     * Delegates to the grammar-aware overload with {@code grammar = null}.
+     */
+    public String complete(String prompt, int maxTokens, float temperature,
+                           String[] stopSequences, int timeoutSecs) throws Exception {
+        return complete(prompt, maxTokens, temperature, stopSequences, timeoutSecs, null);
+    }
+
+    /**
+     * Run a completion against the loaded model with an optional GBNF grammar constraint.
+     *
+     * When {@code grammar} is non-null, llama-server constrains token sampling at every
+     * step so the output can only form strings that match the grammar.  For JSON grammars
+     * this means the model physically cannot produce malformed JSON, preamble text, or
+     * markdown fences — regardless of model size or quantization level.
      *
      * Port and apiKey are captured under a brief synchronized block, then the
      * lock is released before the HTTP call.  This avoids blocking
      * stop()/ensureModelLoaded() for the full 30-120 s inference window while
      * still preventing a race where stopInternal() zeroes {@code port} to -1
      * between the isRunning() guard and the URL construction below.
+     *
+     * @param grammar optional GBNF grammar string (see {@link JsonGrammar}); null = unconstrained
      */
     public String complete(String prompt, int maxTokens, float temperature,
-                           String[] stopSequences, int timeoutSecs) throws Exception {
+                           String[] stopSequences, int timeoutSecs, String grammar) throws Exception {
         final int    localPort;
         final String localApiKey;
         synchronized (this) {
@@ -221,6 +237,13 @@ public class LlamaServerManager {
             JsonArray stops = new JsonArray();
             for (String s : stopSequences) stops.add(s);
             body.add("stop", stops);
+        }
+
+        // Grammar-constrained generation: llama-server will reject any token that
+        // would cause the output to deviate from the GBNF grammar at the current
+        // position.  Only set when the caller explicitly requests it (e.g. JSON output).
+        if (grammar != null && !grammar.isEmpty()) {
+            body.addProperty("grammar", grammar);
         }
 
         // newBuilder() on an existing OkHttpClient shares the connection pool and

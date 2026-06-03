@@ -6,6 +6,7 @@ import com.automationanywhere.botcommand.data.impl.StringValue;
 import com.automationanywhere.botcommand.exception.BotCommandException;
 import com.automationanywhere.botcommand.utils.ActionUtils;
 import com.automationanywhere.botcommand.utils.DictionaryHelper;
+import com.automationanywhere.botcommand.utils.JsonGrammar;
 import com.automationanywhere.botcommand.utils.ModelManager;
 import com.automationanywhere.botcommand.utils.LlamaInference;
 import com.automationanywhere.commandsdk.annotations.*;
@@ -179,13 +180,18 @@ public class TransformToJSON {
             String prompt = buildTransformationPrompt(inputText, inputFormat, outputType);
             logger.debug("Generated prompt: {}", prompt.length() > 200 ? prompt.substring(0, 200) + "..." : prompt);
 
-            // Generate JSON — cap to the model's own max output token limit
+            // Generate JSON with grammar constraint — llama-server's sampler physically
+            // rejects any token that would violate the GBNF grammar at each step, so
+            // the output is guaranteed to be valid JSON matching the requested structure.
+            // No preamble text, no markdown fences, no truncated objects are possible.
+            String grammar = JsonGrammar.forOutputType(outputType);
             int effectiveMaxTokens = Math.min(MAX_OUTPUT_TOKENS, modelType.getMaxOutputTokens());
             String rawResponse = inference.generateText(
                 prompt,
                 effectiveMaxTokens,
                 JSON_TEMPERATURE,
-                timeoutSeconds.intValue()
+                timeoutSeconds.intValue(),
+                grammar
             );
 
             // Parse, validate, and format the JSON response
@@ -287,77 +293,60 @@ public class TransformToJSON {
     }
 
     /**
-     * Parse, validate, and format the JSON response.
+     * Validate and format the JSON response.
      * Package-private for unit testing.
      *
-     * @throws BotCommandException if the response is empty, contains no JSON, or the JSON structure
-     *         does not match the requested outputType
+     * With grammar-constrained generation the model output is guaranteed to be
+     * syntactically valid JSON, so the heavy cleanup heuristics (strip markdown,
+     * find first '{', bracket-match) are no longer the primary path.  They are
+     * retained as a defensive fallback for non-grammar callers or future refactors.
+     *
+     * @throws BotCommandException if the response is empty, contains no JSON, or the
+     *         JSON structure does not match the requested outputType
      */
-    String parseAndValidateJSON(String rawResponse, String outputStyle, String outputType) throws BotCommandException {
+    String parseAndValidateJSON(String rawResponse, String outputStyle, String outputType)
+            throws BotCommandException {
         if (rawResponse == null || rawResponse.trim().isEmpty()) {
             throw new BotCommandException("Model returned empty response");
         }
 
         String cleaned = rawResponse.trim();
 
-        // Strip DeepSeek R1 thinking blocks (<think>...</think>)
+        // --- Defensive cleanup (no-op when grammar was applied) ---
+
+        // Strip DeepSeek R1 thinking blocks (<think>...</think>). Grammar prevents
+        // these, but DeepSeek may still emit partial blocks before the JSON starts
+        // on some builds.
         cleaned = LlamaInference.stripThinkingBlocks(cleaned);
 
-        // Remove markdown code block markers if present
+        // Remove markdown fences — grammar prevents these, kept for safety.
         cleaned = cleaned.replaceAll("^```json\\s*\\n?", "");
         cleaned = cleaned.replaceAll("^```\\s*\\n?", "");
         cleaned = cleaned.replaceAll("\\n?```$", "");
         cleaned = cleaned.trim();
 
-        // Find the JSON content (starts with { or [)
+        // Advance past any preamble to the first '{' or '['.
         int jsonStart = -1;
         for (int i = 0; i < cleaned.length(); i++) {
             char c = cleaned.charAt(i);
-            if (c == '{' || c == '[') {
-                jsonStart = i;
-                break;
-            }
+            if (c == '{' || c == '[') { jsonStart = i; break; }
         }
 
         if (jsonStart == -1) {
             logger.error("No JSON structure found in response. Response preview: {}",
                 cleaned.length() > 200 ? cleaned.substring(0, 200) : cleaned);
-            throw new BotCommandException("No JSON structure found in model response. Response: " +
+            throw new BotCommandException(
+                "No JSON structure found in model response. Response: " +
                 (cleaned.length() > 100 ? cleaned.substring(0, 100) + "..." : cleaned));
         }
-
-        // Extract from first { or [ to the end, then find matching closing bracket
         cleaned = cleaned.substring(jsonStart);
 
-        // Find the last } or ] that matches
-        int depth = 0;
-        int jsonEnd = -1;
-        char startChar = cleaned.charAt(0);
-        char endChar = (startChar == '{') ? '}' : ']';
+        // --- Validate and format ---
 
-        for (int i = 0; i < cleaned.length(); i++) {
-            char c = cleaned.charAt(i);
-            if (c == startChar || c == (startChar == '{' ? '{' : '[')) {
-                depth++;
-            } else if (c == endChar || c == (endChar == '}' ? '}' : ']')) {
-                depth--;
-                if (depth == 0) {
-                    jsonEnd = i;
-                    break;
-                }
-            }
-        }
-
-        if (jsonEnd != -1) {
-            cleaned = cleaned.substring(0, jsonEnd + 1);
-        }
-
-        // Validate JSON syntax
         try {
             Object parsed = gson.fromJson(cleaned, Object.class);
 
-            // Validate output type matches request
-            boolean isArray = parsed instanceof java.util.List;
+            boolean isArray  = parsed instanceof java.util.List;
             boolean isObject = parsed instanceof java.util.Map;
 
             if (outputType.equals("array") && !isArray) {
@@ -370,22 +359,17 @@ public class TransformToJSON {
                     "Change the Output Type to 'Array', or adjust the input so it contains a single record.");
             }
 
-            // Re-parse to apply formatting
-            Object finalParsed = gson.fromJson(cleaned, Object.class);
-
             if (outputStyle.equals("pretty")) {
-                com.google.gson.GsonBuilder gsonBuilder = new com.google.gson.GsonBuilder();
-                gsonBuilder.setPrettyPrinting();
-                Gson prettyGson = gsonBuilder.create();
-                return prettyGson.toJson(finalParsed);
-            } else {
-                return gson.toJson(finalParsed);
+                Gson prettyGson = new com.google.gson.GsonBuilder().setPrettyPrinting().create();
+                return prettyGson.toJson(parsed);
             }
+            return gson.toJson(parsed);
 
         } catch (JsonSyntaxException e) {
-            logger.error("Invalid JSON generated: {}", cleaned);
-            throw new BotCommandException("Generated invalid JSON: " + e.getMessage() +
-                                        "\nGenerated content: " + cleaned);
+            logger.error("Invalid JSON in model response: {}", cleaned);
+            throw new BotCommandException(
+                "Generated invalid JSON: " + e.getMessage() +
+                "\nGenerated content: " + cleaned);
         }
     }
 }

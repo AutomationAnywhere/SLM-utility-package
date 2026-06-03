@@ -41,14 +41,26 @@ public class LlamaInference {
 
     /**
      * General-purpose text generation with configurable parameters.
-     *
-     * The prompt should already be fully formatted (chat template applied).
-     * This method keeps the same interface as the previous JNI-based version.
+     * No grammar constraint — delegates to the grammar-aware overload with null grammar.
      */
     public String generateText(String prompt, int maxTokens, float temperature, int timeoutSeconds)
             throws Exception {
-        logger.debug("generateText() maxTokens={}, temperature={}, timeout={}s",
-            maxTokens, temperature, timeoutSeconds);
+        return generateText(prompt, maxTokens, temperature, timeoutSeconds, null);
+    }
+
+    /**
+     * General-purpose text generation with an optional GBNF grammar constraint.
+     *
+     * When {@code grammar} is non-null, llama-server constrains token sampling so the
+     * output is guaranteed to match the grammar (e.g. valid JSON).  Pass one of the
+     * constants from {@link JsonGrammar} for structured-output use cases.
+     *
+     * The prompt should already be fully formatted (chat template applied).
+     */
+    public String generateText(String prompt, int maxTokens, float temperature,
+                               int timeoutSeconds, String grammar) throws Exception {
+        logger.debug("generateText() maxTokens={}, temperature={}, timeout={}s, grammar={}",
+            maxTokens, temperature, timeoutSeconds, grammar != null ? "set" : "none");
 
         // Apply chat template if not already formatted
         String formattedPrompt = applyChatTemplate(prompt);
@@ -63,7 +75,8 @@ public class LlamaInference {
             Math.min(maxTokens, modelType.getMaxOutputTokens()),
             temperature,
             stopSequences,
-            timeoutSeconds);
+            timeoutSeconds,
+            grammar);
 
         logger.info("generateText complete ({} chars)", result.length());
         return result;
